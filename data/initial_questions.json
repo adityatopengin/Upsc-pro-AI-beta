@@ -1,0 +1,28 @@
+// data/initial_questions.json - Example of the structured question schema
+
+[
+    {
+        "id": 101,
+        "subject": "History",
+        "topic": "IVC",
+        "type": "multi-choice",
+        "keywords": ["IVC", "sites", "Gujarat", "dockyard", "water system"],
+        "question_text": "Which of the following statements about the Indus Valley Civilization (IVC) sites are correct?",
+        "statements": [
+            { "id": "S1", "text": "The primary dockyard of the IVC was discovered at Lothal in modern Gujarat.", "is_correct": true },
+            { "id": "S2", "text": "Dholavira is famous for its massive water reservoir and sophisticated water harvesting system.", "is_correct": true },
+            { "id": "S3", "text": "Harappa was the largest IVC site, covering over 200 hectares.", "is_correct": false }
+        ],
+        "options": [
+            { "id": "A", "text": "S1 only", "is_correct": false },
+            { "id": "B", "text": "S2 and S3 only", "is_correct": false },
+            { "id": "C", "text": "S1 and S2 only", "is_correct": true },
+            { "id": "D", "text": "S1, S2 and S3", "is_correct": false }
+        ],
+        "explanation": {
+            "summary": "Harappa was not the largest site; Mohenjo-Daro was. Lothal had the dockyard, and Dholavira had the water system.",
+            "detail": "S1 and S2 are correct. S3 is incorrect as Mohenjo-Daro is generally considered the largest excavated site."
+        }
+    }
+]
+
