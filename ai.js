@@ -1,4 +1,4 @@
-// ai.js - Client-Side AI Integration (Reasoning & Thinking Enabled)
+// ai.js - Client-Side AI Integration (Reasoning + CA Generator)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
@@ -121,19 +121,14 @@ export async function generateSocraticExplanation(question, userSelections, corr
     
     try {
         // DYNAMIC CONFIGURATION
-        // If it's a thinking model, we don't pass systemInstruction via config (sometimes unsupported),
-        // we append it to the prompt or use valid v1beta config.
         let modelParams = { model: activeModelName };
-        
         if (!isThinkingModel) {
-            // Standard models take systemInstruction cleanly
             modelParams.systemInstruction = systemInstruction;
         }
 
         const model = genAI.getGenerativeModel(modelParams);
 
-        // If it is a thinking model, we inject the persona into the prompt 
-        // because thinking models sometimes ignore system instructions in favor of reasoning.
+        // Inject persona into prompt for Thinking models (as they sometimes ignore systemInstruction)
         const finalPrompt = isThinkingModel 
             ? `${systemInstruction}\n\n${userPrompt}` 
             : userPrompt;
@@ -158,11 +153,8 @@ export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     
     try {
         const model = genAI.getGenerativeModel({ model: activeModelName });
-        
-        // For Remix, we just want JSON, thinking isn't strictly necessary but helpful for quality.
         const finalPrompt = `${systemInstruction}\n\n${userPrompt}`;
         const result = await model.generateContent(finalPrompt);
-        
         return extractJson(result.response.text());
     } catch (error) {
         throw new Error(error.message);
@@ -196,6 +188,50 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
     try {
         const model = genAI.getGenerativeModel({ model: activeModelName });
         const result = await model.generateContent(userPrompt);
+        return extractJson(result.response.text());
+    } catch (error) {
+        throw new Error(error.message);
+    }
+}
+
+// Feature E: Daily Current Affairs Generator (NEW)
+export async function generateCurrentAffairsQuiz(exampleSchema) {
+    if (!activeModelName) await initializeGenerativeModel();
+    if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
+
+    const today = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const systemInstruction = `
+    You are a Senior UPSC Question Setter. 
+    Task: Create a 'Current Affairs Mini-Mock' for UPSC Prelims 2026.
+    
+    CONTEXT:
+    - Current Date: ${today}
+    - Focus Period: Events from the last 30 days.
+    - Difficulty: High (UPSC Standard).
+    
+    STRICT GUIDELINES:
+    1. Generate exactly 5 Questions.
+    2. DIVERSITY: 
+       - Q1: Polity (Recent Bills/Supreme Court Verdicts -> Static Linkage).
+       - Q2: Economy (Banking/Inflation/Trade data -> Core Concepts).
+       - Q3: Environment (Species in news/Conferences -> Conservation status).
+       - Q4: Science & Tech (New Tech/Space -> Principles).
+       - Q5: IR/Mapping (Places in news -> Geography).
+    
+    3. PATTERN: Use 'Statement Based' (Consider the following statements...) format.
+    4. OUTPUT: Return strictly a JSON array matching the provided Schema. No markdown, no text.
+    `;
+
+    const userPrompt = `Schema Reference: ${JSON.stringify(exampleSchema)}. Generate the JSON now.`;
+    
+    try {
+        const model = genAI.getGenerativeModel({ model: activeModelName });
+        
+        // Combine prompt for robustness
+        const finalPrompt = `${systemInstruction}\n\n${userPrompt}`;
+        
+        const result = await model.generateContent(finalPrompt);
         return extractJson(result.response.text());
     } catch (error) {
         throw new Error(error.message);
