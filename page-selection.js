@@ -1,148 +1,148 @@
-// page-selection.js - Logic for Quiz Selection & Settings
-// (Final Architecture: Direct Execution + Lazy Loading)
+// page-selection.js - Debug Version with "Loud" Alerts
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
 import { getSetting, addQuestions } from './db.js'; 
 import { hideModal } from './ui-common.js'; 
 
-// --- Core Logic Function ---
-function initPageLogic() {
-    console.log("[Page Logic] Initializing...");
+// 1. PROOF OF LIFE: This runs immediately when the file loads.
+// If you do NOT see this alert on reload, it means there is a syntax error in 'ai.js' or 'db.js'.
+alert("DEBUG: page-selection.js has loaded successfully!"); 
 
-    // --- DOM Elements ---
-    const selectionContent = document.getElementById('quiz-selection-content');
-    const apiKeyInput = document.getElementById('api-key-input');
-    const saveSettingsBtn = document.getElementById('save-settings-btn');
-    const remixTopicInput = document.getElementById('remix-topic-input');
-    const remixCountInput = document.getElementById('remix-count-input');
-    const remixQuizBtn = document.getElementById('remix-quiz-btn');
-    const settingsStatus = document.getElementById('settings-status');
-
-    // --- 1. Load Existing Key ---
-    getSetting(APP_CONFIG.GEMINI_API_KEY_NAME).then(existingKey => {
-        if (apiKeyInput && existingKey) {
-            apiKeyInput.value = existingKey;
-            console.log("[Page Logic] Existing key pre-filled");
+// Initialize (Pre-fill Key)
+(async function init() {
+    try {
+        const existingKey = await getSetting(APP_CONFIG.GEMINI_API_KEY_NAME);
+        const input = document.getElementById('api-key-input');
+        if (input && existingKey) {
+            input.value = existingKey;
         }
-    });
+    } catch (e) {
+        console.warn("Could not load settings:", e);
+    }
+})();
 
-    // --- 2. Quiz Selection (Static) ---
-    if (selectionContent) {
-        selectionContent.addEventListener('click', (e) => {
-            const btn = e.target.closest('button');
-            if (!btn) return;
+// 2. GLOBAL LISTENER (Catches clicks anywhere on the screen)
+document.addEventListener('click', async (e) => {
+    
+    // --- A. Handle "Connect AI" Button ---
+    // We check if the thing you clicked is the Settings Button
+    const settingsBtn = e.target.closest('#save-settings-btn');
+    
+    if (settingsBtn) {
+        // Prevent double clicks
+        if (settingsBtn.disabled) return;
 
-            if (btn.dataset.action === 'start-static-quiz') {
-                const subject = btn.dataset.subject;
-                const topic = btn.dataset.topic;
+        // DEBUG STEP 1: Confirm the button works
+        alert("DEBUG STEP 1: Button Click Detected!");
+
+        const apiKeyInput = document.getElementById('api-key-input');
+        const settingsStatus = document.getElementById('settings-status');
+        const apiKey = apiKeyInput.value.trim();
+
+        if (!apiKey) {
+            alert("DEBUG: No API Key entered.");
+            settingsStatus.textContent = "Please enter an API key.";
+            return;
+        }
+
+        // UI Feedback
+        settingsBtn.disabled = true;
+        settingsBtn.textContent = "Loading...";
+        settingsStatus.textContent = "Initializing System...";
+        settingsStatus.className = "text-xs mb-3 text-blue-400";
+
+        try {
+            // DEBUG STEP 2: Trying to load the AI file
+            alert("DEBUG STEP 2: Attempting to import ai.js...");
+            
+            // Dynamic Import
+            const aiModule = await import('./ai.js');
+            
+            // DEBUG STEP 3: File imported, calling connection function
+            alert("DEBUG STEP 3: ai.js loaded. Verifying key...");
+            
+            settingsBtn.textContent = "Verifying...";
+            const result = await aiModule.saveApiKey(apiKey); 
+
+            // DEBUG STEP 4: Got result from Google
+            alert(`DEBUG STEP 4: Result received. Success: ${result.success}`);
+
+            if (result.success) {
+                settingsStatus.textContent = `Connected! Model: ${result.model}`;
+                settingsStatus.className = "text-xs mb-3 text-green-400 font-bold";
                 
-                if (subject && topic) {
+                setTimeout(() => {
                     hideModal();
-                    startNewQuiz(subject, topic);
-                }
+                    settingsBtn.disabled = false;
+                    settingsBtn.textContent = "Connect AI";
+                    settingsStatus.textContent = ""; 
+                }, 1500);
+            } else {
+                settingsStatus.textContent = `Failed: ${result.error}`;
+                settingsStatus.className = "text-xs mb-3 text-red-400 font-bold break-words";
+                settingsBtn.disabled = false;
+                settingsBtn.textContent = "Retry Connection";
+                alert("DEBUG ERROR: " + result.error);
             }
-        });
+        } catch (error) {
+             // Catch import errors (Internet/Syntax)
+             console.error("Import failed:", error);
+             settingsStatus.textContent = "Error loading AI module.";
+             
+             alert("DEBUG CRITICAL ERROR:\n" + error.message);
+             
+             settingsBtn.disabled = false;
+             settingsBtn.textContent = "Connect AI";
+        }
+        return; 
     }
 
-    // --- 3. AI Remix Quiz (Lazy Load) ---
-    if (remixQuizBtn) {
-        remixQuizBtn.addEventListener('click', async () => {
-            const topic = remixTopicInput.value.trim();
-            const count = parseInt(remixCountInput.value);
+    // --- B. Handle "AI Remix" Button ---
+    const remixBtn = e.target.closest('#remix-quiz-btn');
+    if (remixBtn) {
+        const topicInput = document.getElementById('remix-topic-input');
+        const countInput = document.getElementById('remix-count-input');
+        const topic = topicInput.value.trim();
+        const count = parseInt(countInput.value);
 
-            if (!topic) { alert("Please enter a topic."); return; }
+        if (!topic) { alert("Please enter a topic."); return; }
 
-            remixQuizBtn.disabled = true;
-            remixQuizBtn.textContent = "Loading AI Module...";
+        remixBtn.disabled = true;
+        remixBtn.textContent = "Loading AI...";
+
+        try {
+            const aiModule = await import('./ai.js');
+            remixBtn.textContent = "Generating...";
+            const existingQuestions = await fetchInitialQuestions();
+            const exampleSchema = existingQuestions.slice(0, 1); 
+
+            const newQuestions = await aiModule.generateRemixQuiz(
+                { subject: "Remixed", topic: topic }, 
+                exampleSchema, 
+                count
+            );
             
-            try {
-                // Dynamic Import: Loads ai.js only when needed
-                const aiModule = await import('./ai.js');
-                
-                remixQuizBtn.textContent = "Generating...";
-                const existingQuestions = await fetchInitialQuestions();
-                const exampleSchema = existingQuestions.slice(0, 1); 
+            await addQuestions(newQuestions); 
+            hideModal();
+            startNewQuiz("Remixed", topic);
 
-                const newQuestions = await aiModule.generateRemixQuiz(
-                    { subject: "Remixed", topic: topic }, 
-                    exampleSchema, 
-                    count
-                );
-                
-                await addQuestions(newQuestions); 
-                hideModal();
-                startNewQuiz("Remixed", topic);
-
-            } catch (error) {
-                console.error(error);
-                alert(`AI Failed: ${error.message}`);
-            } finally {
-                remixQuizBtn.disabled = false;
-                remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
-            }
-        });
+        } catch (error) {
+            alert(`AI Failed: ${error.message}`);
+        } finally {
+            remixBtn.disabled = false;
+            remixBtn.textContent = 'Generate & Start Remix Quiz';
+        }
+        return;
     }
 
-    // --- 4. Settings & AI Connection (The Critical Fix) ---
-    if (saveSettingsBtn) {
-        console.log("[Page Logic] Settings Button Found - Attaching Listener");
-        
-        saveSettingsBtn.addEventListener('click', async () => {
-            console.log("[UI] Settings Button Clicked");
-            const apiKey = apiKeyInput.value.trim();
-            
-            if (!apiKey) {
-                settingsStatus.textContent = "Please enter an API key.";
-                return;
-            }
-
-            // UI Feedback
-            saveSettingsBtn.disabled = true;
-            saveSettingsBtn.textContent = "Loading AI...";
-            settingsStatus.textContent = "Initializing System...";
-            settingsStatus.className = "text-xs mb-3 text-blue-400";
-
-            try {
-                // DYNAMIC IMPORT: Loads ai.js only on click
-                const aiModule = await import('./ai.js');
-                
-                saveSettingsBtn.textContent = "Verifying...";
-                const result = await aiModule.saveApiKey(apiKey); 
-
-                if (result.success) {
-                    settingsStatus.textContent = `Connected! Model: ${result.model}`;
-                    settingsStatus.className = "text-xs mb-3 text-green-400 font-bold";
-                    
-                    setTimeout(() => {
-                        hideModal();
-                        saveSettingsBtn.disabled = false;
-                        saveSettingsBtn.textContent = "Connect AI";
-                        settingsStatus.textContent = ""; 
-                    }, 1500);
-                } else {
-                    settingsStatus.textContent = `Failed: ${result.error}`;
-                    settingsStatus.className = "text-xs mb-3 text-red-400 font-bold break-words";
-                    saveSettingsBtn.disabled = false;
-                    saveSettingsBtn.textContent = "Retry Connection";
-                }
-            } catch (error) {
-                 settingsStatus.textContent = `Error: Could not load AI library. Check Internet.`;
-                 console.error("Import failed:", error);
-                 saveSettingsBtn.disabled = false;
-                 saveSettingsBtn.textContent = "Connect AI";
-            }
-        });
-    } else {
-        console.warn("[Page Logic] Save Settings Button NOT found in DOM");
+    // --- C. Handle "Static Quiz" Buttons ---
+    const staticBtn = e.target.closest('button[data-action="start-static-quiz"]');
+    if (staticBtn) {
+        const subject = staticBtn.dataset.subject;
+        const topic = staticBtn.dataset.topic;
+        hideModal();
+        startNewQuiz(subject, topic);
     }
-}
-
-// --- BOOTSTRAP (The "Race Condition" Fix) ---
-// If the DOM is already ready, run NOW. If not, wait.
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPageLogic);
-} else {
-    initPageLogic(); // Run immediately
-}
+});
 
