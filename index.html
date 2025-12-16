@@ -59,6 +59,12 @@
             color: white;
         }
         .glass-input:focus { outline: none; border-color: #6366f1; background: rgba(0, 0, 0, 0.4); }
+        
+        /* Prose styling for AI content */
+        .prose strong { color: #818cf8; } /* Indigo-400 for bold text */
+        .prose ul { list-style-type: disc; padding-left: 1.2em; }
+        .prose li { margin-bottom: 0.5em; }
+        .prose h3, .prose h4 { color: #fff; margin-top: 1em; font-weight: 600; }
     </style>
 </head>
 <body class="min-h-screen relative overflow-x-hidden">
@@ -140,6 +146,43 @@
                             class="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-900/20 hover:scale-[1.02] hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
                         <span>🔄</span> Generate Today's Quiz
                     </button>
+                </div>
+            </div>
+
+            <div id="news-scanner-card" class="mt-6 p-6 rounded-3xl glass-panel shadow-2xl">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2 bg-indigo-500/20 rounded-lg text-2xl">📰</div>
+                    <div>
+                        <h2 class="text-xl font-bold text-white">News Scanner</h2>
+                        <p class="text-xs text-gray-400">Paste an editorial or topic. Aditya will summarize it.</p>
+                    </div>
+                </div>
+
+                <textarea id="news-input" rows="3" 
+                        placeholder="Paste Article Text or Topic Name here..." 
+                        class="w-full p-4 rounded-xl glass-input text-sm mb-4 focus:ring-2 focus:ring-indigo-500 transition"></textarea>
+
+                <button id="analyze-news-btn" 
+                        class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg transition flex items-center justify-center gap-2">
+                    <span>✨</span> Discuss with Aditya
+                </button>
+            </div>
+
+            <div id="news-result-card" class="mt-6 hidden transition-all duration-500">
+                <div class="p-6 rounded-3xl glass-panel border border-indigo-500/30 bg-[#1a1f3c]/95 relative">
+                    
+                    <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                        <button onclick="copyNewsResult()" class="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300">
+                            📋 Copy
+                        </button>
+                        <span class="text-xs font-bold text-indigo-300 uppercase tracking-widest">Aditya's Analysis</span>
+                        <button onclick="closeNewsResult()" class="text-xs flex items-center gap-1 text-red-400 hover:text-red-300">
+                            ❌ Close
+                        </button>
+                    </div>
+
+                    <div id="news-analysis-content" class="prose prose-invert prose-sm max-w-none text-gray-200">
+                        </div>
                 </div>
             </div>
             </main>
