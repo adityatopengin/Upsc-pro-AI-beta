@@ -1,5 +1,5 @@
 // page-selection.js - Logic for Quiz Selection & Settings
-// (Architecture: Direct Execution + Lazy Loading)
+// (Final Architecture: Direct Execution + Lazy Loading)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
@@ -57,7 +57,7 @@ function initPageLogic() {
             remixQuizBtn.textContent = "Loading AI Module...";
             
             try {
-                // Dynamic Import
+                // Dynamic Import: Loads ai.js only when needed
                 const aiModule = await import('./ai.js');
                 
                 remixQuizBtn.textContent = "Generating...";
