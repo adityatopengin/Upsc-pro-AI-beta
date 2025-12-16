@@ -1,20 +1,15 @@
-// ai.js - Client-Side AI Integration (Fixed for Dec 2025)
+// ai.js - Client-Side AI Integration (Working Models + Stable Architecture)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
-import { logError, APP_CONFIG } from './core.js'; 
+import { APP_CONFIG } from './core.js'; 
 
-// --- CRITICAL UPDATE: MODEL LIST (Dec 2025) ---
+// --- WORKING MODEL LIST (Confirmed Dec 2025) ---
 const MODEL_PRIORITY_LIST = [
-    // 1. BEST FOR FREE TIER (High Quota: ~1000/day)
-    'gemini-2.5-flash-lite', 
-    
-    // 2. BACKUP (High Speed, but Low Free Quota: ~20/day)
-    'gemini-2.5-flash',      
-
-    // 3. LEGACY FALLBACKS (If 2.5 fails)
-    'gemini-1.5-flash-002',   
-    'gemini-1.5-pro-002'
+    'gemini-2.5-flash-lite',  // Confirmed Working & High Quota
+    'gemini-2.5-flash',       // Backup
+    'gemini-1.5-flash-002',   // Legacy Backup
+    'gemini-1.5-pro-002'      // Legacy Pro
 ];
 
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
@@ -22,7 +17,7 @@ const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 let genAI = null;
 let activeModelName = null;
 
-// --- 1. Initialization ---
+// --- 1. Initialization (Passive - Only runs when called) ---
 export async function initializeGenerativeModel() {
     const apiKey = await getSetting(GEMINI_API_KEY_DB_KEY);
     
@@ -35,26 +30,25 @@ export async function initializeGenerativeModel() {
         
         let lastError = null;
 
-        // Try models in order until one connects
+        // Loop through models until one works
         for (const modelName of MODEL_PRIORITY_LIST) {
             try {
                 const model = genAI.getGenerativeModel({ model: modelName });
                 // Tiny Ping to verify access
                 await model.generateContent("Test"); 
                 
-                // If we get here, it worked!
+                // Success!
                 activeModelName = modelName;
                 console.log(`[AI] Connected to: ${activeModelName}`);
                 return { success: true, model: activeModelName }; 
                 
             } catch (e) {
-                console.warn(`[AI] ${modelName} failed. Reason: ${e.message}`);
+                console.warn(`[AI] ${modelName} failed: ${e.message}`);
                 lastError = e.message;
             }
         }
         
-        // If ALL failed
-        return { success: false, error: `Connection failed. Check API Key or Quota. Last Error: ${lastError}` };
+        return { success: false, error: `All models failed. Last Error: ${lastError}` };
 
     } catch (criticalError) {
         return { success: false, error: `Init Error: ${criticalError.message}` };
@@ -141,5 +135,6 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
     }
 }
 
-document.addEventListener('DOMContentLoaded', initializeGenerativeModel);
+// REMOVED: document.addEventListener('DOMContentLoaded'...) 
+// This prevents the "Race Condition" bug.
 
