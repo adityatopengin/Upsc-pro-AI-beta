@@ -95,7 +95,38 @@
                     Next Question →
                 </button>
             </div>
-            
+            <div id="aditya-floating-btn" class="fixed bottom-6 right-6 z-40 hidden transition-transform hover:scale-110 active:scale-95">
+    <button onclick="askAditya()" 
+            class="bg-gradient-to-r from-orange-500 to-red-600 text-white p-4 rounded-full shadow-lg shadow-orange-500/40 border-2 border-white/20 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+    </button>
+    <span class="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce">AI</span>
+</div>
+
+<div id="aditya-sheet" class="fixed bottom-0 left-0 right-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out">
+    <div class="bg-[#1a1f3c]/95 backdrop-blur-xl border-t border-white/20 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] max-h-[70vh] flex flex-col">
+        
+        <div class="flex justify-between items-center p-4 border-b border-white/10 cursor-pointer" onclick="closeAditya()">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-orange-500/20 rounded-lg">
+                    <span class="text-2xl">🧞‍♂️</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-white">Aditya</h3>
+                    <p class="text-xs text-orange-400">AI Mentor • Detailed Diagnosis</p>
+                </div>
+            </div>
+            <button class="text-gray-400 hover:text-white bg-white/5 p-2 rounded-full">✕</button>
+        </div>
+
+        <div id="aditya-content" class="p-6 overflow-y-auto text-gray-200 text-sm leading-relaxed space-y-4 font-light">
+            <p class="italic text-gray-500">Tap the button to ask Aditya for help on this question...</p>
+        </div>
+    </div>
+</div>
+
             <div id="home-screen" class="p-6 rounded-3xl glass-panel shadow-2xl">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-xl font-semibold">My Notes</h2>
