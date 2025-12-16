@@ -1,15 +1,17 @@
-// ai.js - Client-Side AI Integration for UPSC Pro PWA (Fixed)
+// ai.js - Client-Side AI Integration for UPSC Pro PWA (Fixed SDK)
 
-import { getSetting, setSetting } from './db.js'; // FIX: Import from DB layer
+// 1. IMPORT THE LIBRARY DIRECTLY (This fixes the connection error)
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+import { getSetting, setSetting } from './db.js'; 
 import { logError, APP_CONFIG } from './core.js'; 
 
 // --- Configuration ---
-// FIX: Switched to stable 1.5 models (2.5 is not yet public via standard API)
 const GEMINI_MODEL_FLASH = 'gemini-1.5-flash';
 const GEMINI_MODEL_PRO = 'gemini-1.5-pro';
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 
-let generativeModel = null;
+let genAI = null; // The main client instance
+let generativeModel = null; // The specific model instance
 
 // --- 1. Initialization and API Key Management ---
 export async function initializeGenerativeModel() {
@@ -21,13 +23,13 @@ export async function initializeGenerativeModel() {
     }
 
     try {
-        // Initialize the GenerativeModel instance
-        // Note: 'google' global is loaded via the script tag in index.html
-        generativeModel = new google.generativeai.GenerativeModel({
-            apiKey: apiKey,
-            model: GEMINI_MODEL_FLASH, 
-        });
-        console.log("[AI] GenerativeModel initialized successfully.");
+        // Initialize the Client using the imported class
+        genAI = new GoogleGenerativeAI(apiKey);
+        
+        // Get the model instance
+        generativeModel = genAI.getGenerativeModel({ model: GEMINI_MODEL_FLASH });
+        
+        console.log("[AI] Gemini Model initialized successfully.");
         return true;
     } catch (error) {
         logError('AI_INIT_CRITICAL', error);
@@ -38,7 +40,7 @@ export async function initializeGenerativeModel() {
 
 export async function saveApiKey(key) {
     await setSetting(GEMINI_API_KEY_DB_KEY, key);
-    await initializeGenerativeModel();
+    return await initializeGenerativeModel();
 }
 
 
@@ -47,9 +49,8 @@ export async function saveApiKey(key) {
  */
 export async function generateSocraticExplanation(question, userSelections, correctSelections) {
     if (!generativeModel) {
-        // Try re-initializing in case it was missed
         const success = await initializeGenerativeModel();
-        if (!success) return "Error: AI Model not initialized. Please set your API Key in Settings.";
+        if (!success) return "Error: AI Model not initialized. Please check your API Key.";
     }
 
     const systemInstruction = "You are a highly knowledgeable UPSC expert and a patient Socratic tutor. Focus 70% of your response on addressing the specific error or logic gap implied by the user's incorrect choice. Use a step-by-step approach. Be precise and concise.";
@@ -61,11 +62,15 @@ export async function generateSocraticExplanation(question, userSelections, corr
     `;
     
     try {
-        const response = await generativeModel.generateContent({
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            config: { systemInstruction: systemInstruction, temperature: 0.2 },
+        // Create a specific chat or content request
+        // Note: We use the existing generativeModel instance
+        const modelWithInstruction = genAI.getGenerativeModel({ 
+            model: GEMINI_MODEL_FLASH,
+            systemInstruction: systemInstruction 
         });
-        return response.response.text();
+
+        const result = await modelWithInstruction.generateContent(userPrompt);
+        return result.response.text();
 
     } catch (error) {
         logError('AI_EXPLAINER_GENERATE_FAIL', error, { questionId: question.id });
@@ -79,7 +84,7 @@ export async function generateSocraticExplanation(question, userSelections, corr
  */
 export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     if (!generativeModel) await initializeGenerativeModel();
-    if (!generativeModel) throw new Error("AI Model not initialized. Set your API key.");
+    if (!generativeModel) throw new Error("AI Model not initialized.");
 
     const systemInstruction = `
         You are an expert content generation engine for UPSC-style quizzes. Your SOLE task is to generate exactly ${count} NEW and UNIQUE question objects.
@@ -95,22 +100,22 @@ export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     `;
     
     try {
-        const response = await generativeModel.generateContent({
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            config: { systemInstruction: systemInstruction, temperature: 0.7 },
+        const modelWithInstruction = genAI.getGenerativeModel({ 
+            model: GEMINI_MODEL_FLASH,
+            systemInstruction: systemInstruction 
         });
 
-        // Clean the response (remove Markdown code blocks if AI adds them)
-        let jsonText = response.response.text().trim();
+        const result = await modelWithInstruction.generateContent(userPrompt);
+        
+        // Clean the response
+        let jsonText = result.response.text().trim();
         jsonText = jsonText.replace(/^```json/, '').replace(/```$/, '').trim();
 
         const newQuestions = JSON.parse(jsonText);
 
-        if (Array.isArray(newQuestions) && newQuestions.length === count) {
+        if (Array.isArray(newQuestions)) {
             return newQuestions;
         } else {
-            // Fallback: If AI generated fewer questions, just return what it made
-            if (Array.isArray(newQuestions)) return newQuestions;
             throw new Error(`AI returned invalid structure.`);
         }
 
@@ -132,11 +137,13 @@ export async function generateNotesFromDiagram(base64Image, mimeType, promptText
     const systemInstruction = "You are a specialized note-taking assistant. Analyze the provided diagram or chart and convert its key information into a concise, revision-ready bulleted list. Use clear Markdown structure.";
     
     try {
-        const response = await generativeModel.generateContent({
-            contents: [{ role: "user", parts: [imagePart, { text: `Analyze the image and generate notes. User focus: "${promptText}".` }] }], 
-            config: { systemInstruction: systemInstruction, model: GEMINI_MODEL_FLASH, temperature: 0.2 },
+        const model = genAI.getGenerativeModel({ 
+            model: GEMINI_MODEL_FLASH,
+            systemInstruction: systemInstruction
         });
-        return response.response.text();
+
+        const result = await model.generateContent([promptText, imagePart]);
+        return result.response.text();
 
     } catch (error) {
         logError('AI_VISION_GENERATE_FAIL', error);
@@ -152,9 +159,6 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
     if (!generativeModel) await initializeGenerativeModel();
     if (!generativeModel) throw new Error("AI Model not initialized.");
     
-    // Switch to PRO model for better reasoning if available, otherwise Flash is fine
-    const proModel = generativeModel.getGenerativeModel ? generativeModel.getGenerativeModel({ model: GEMINI_MODEL_PRO }) : generativeModel;
-
     const systemInstruction = `
         You are a highly experienced and strict UPSC examiner. Your grading MUST reflect the standard of the Civil Services Examination.
         Key Grading Rules: 
@@ -172,16 +176,18 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
     `;
     
     try {
-        const response = await proModel.generateContent({
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            config: { systemInstruction: systemInstruction, temperature: 0.1 },
+        // Use Pro model for grading if possible
+        const proModel = genAI.getGenerativeModel({ 
+            model: GEMINI_MODEL_PRO,
+            systemInstruction: systemInstruction 
         });
 
-        let jsonText = response.response.text().trim();
+        const result = await proModel.generateContent(userPrompt);
+        
+        let jsonText = result.response.text().trim();
         jsonText = jsonText.replace(/^```json/, '').replace(/```$/, '').trim();
 
-        const result = JSON.parse(jsonText);
-        return result;
+        return JSON.parse(jsonText);
 
     } catch (error) {
         logError('AI_GRADER_FAIL', error);
