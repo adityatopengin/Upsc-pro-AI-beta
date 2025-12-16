@@ -1,91 +1,59 @@
-// ui-common.js - Common UI utilities, Unified Modal System, and Theme Helpers
+// ui-common.js - Central UI Management & Navigation
 
-import { THEME_CLASS_MAP, logError } from './core.js'; // Phase 5: Error Handling & Phase 4: Theme Fix
+// --- Modal Logic ---
+export function showModal(modalId) {
+    const backdrop = document.getElementById('modal-backdrop');
+    const container = document.getElementById('unified-modal-container');
+    const modal = document.getElementById(modalId);
 
-// --- 1. Unified Modal System (Replaces conflicting modal logic - Phase 2 Fix) ---
-
-const modalBackdrop = document.getElementById('modal-backdrop');
-const modalContainer = document.getElementById('unified-modal-container');
-let activeModalContentId = null; 
-
-/**
- * Initializes the modal structure event handlers.
- */
-function initializeModalSystem() {
-    if (!modalBackdrop || !modalContainer) {
-        logError('UI_INIT_FAIL', new Error('Modal base elements not found in DOM.'));
-        return;
+    if (backdrop && container && modal) {
+        backdrop.classList.remove('hidden', 'opacity-0');
+        container.classList.remove('hidden', 'opacity-0');
+        
+        // Hide all other modals first
+        document.querySelectorAll('#unified-modal-container > div').forEach(div => {
+            div.classList.add('hidden');
+        });
+        
+        modal.classList.remove('hidden');
     }
-    
-    // Attach a handler to close the modal when clicking the backdrop
-    modalBackdrop.addEventListener('click', hideModal);
 }
 
-/**
- * Shows the unified modal with specific content.
- * @param {string} contentId - The ID of the hidden content element (e.g., 'quiz-selection-content') to display inside the modal.
- */
-export function showModal(contentId) {
-    const contentElement = document.getElementById(contentId);
-    if (!contentElement || !modalContainer || !modalBackdrop) {
-        logError('UI_MODAL_SHOW_FAIL', new Error(`Content ID or container missing.`), { contentId });
-        return;
-    }
-
-    // 1. Hide any currently active content
-    if (activeModalContentId) {
-        const activeContent = document.getElementById(activeModalContentId);
-        if (activeContent) activeContent.classList.add('hidden');
-    }
-
-    // 2. Move the target content into the modal container and make it visible
-    modalContainer.appendChild(contentElement);
-    contentElement.classList.remove('hidden');
-    activeModalContentId = contentId;
-
-    // 3. Display the modal itself (backdrop and container)
-    modalBackdrop.classList.remove('hidden', 'opacity-0');
-    modalContainer.classList.remove('hidden', 'opacity-0');
-}
-
-/**
- * Hides the unified modal and restores the content to its original location.
- */
 export function hideModal() {
-    if (activeModalContentId) {
-        const contentElement = document.getElementById(activeModalContentId);
-        if (contentElement) {
-            // Restore content back to a hidden area in the main DOM (assumed to be body/app-container)
-            document.body.appendChild(contentElement); 
-            contentElement.classList.add('hidden');
-        }
+    const backdrop = document.getElementById('modal-backdrop');
+    const container = document.getElementById('unified-modal-container');
+
+    if (backdrop && container) {
+        backdrop.classList.add('opacity-0');
+        container.classList.add('opacity-0');
+        
+        setTimeout(() => {
+            backdrop.classList.add('hidden');
+            container.classList.add('hidden');
+            // Hide all inner content
+            document.querySelectorAll('#unified-modal-container > div').forEach(div => {
+                div.classList.add('hidden');
+            });
+        }, 300); // Wait for fade out
     }
-
-    // Add opacity transition classes for smoother closing
-    modalBackdrop.classList.add('opacity-0');
-    modalContainer.classList.add('opacity-0');
-    
-    // Use a small timeout to ensure transition completes before hiding
-    setTimeout(() => {
-        modalBackdrop.classList.add('hidden');
-        modalContainer.classList.add('hidden');
-        activeModalContentId = null;
-    }, 300); 
 }
 
+// --- NEW: Global Navigation (Fixes the "Dead End" bug) ---
+export function goHome() {
+    // 1. Hide Modals
+    hideModal();
 
-// --- 2. Theme Helper (Tailwind Theme Failure Bug Fix) ---
+    // 2. Switch Main Views
+    document.getElementById('quiz-container').classList.add('hidden');
+    document.getElementById('home-screen').classList.remove('hidden');
 
-/**
- * Function to safely retrieve complete, non-purged Tailwind CSS classes.
- * @param {string} key - The key from the THEME_CLASS_MAP (e.g., 'bg-primary').
- * @returns {string} The complete, safe Tailwind class string.
- */
-export function getSafeThemeClasses(key) {
-    return THEME_CLASS_MAP[key] || '';
+    // 3. Reset Search
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
 }
 
-
-// Initialize the modal system when the script runs
-document.addEventListener('DOMContentLoaded', initializeModalSystem);
+// Attach to window so HTML buttons can use it
+window.goHome = goHome;
+window.hideModal = hideModal;
+window.showModal = showModal;
 
