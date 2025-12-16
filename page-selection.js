@@ -3,7 +3,8 @@
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, logError, APP_CONFIG } from './core.js';
 import { initializeGenerativeModel, generateRemixQuiz, saveApiKey } from './ai.js';
-import { getSetting, addQuestions } from './db.js'; // get/add questions are async db functions
+import { getSetting, addQuestions } from './db.js'; 
+import { hideModal } from './ui-common.js'; // Ensure hideModal is imported
 
 // --- DOM Elements ---
 const selectionContent = document.getElementById('quiz-selection-content');
@@ -21,14 +22,12 @@ function handleQuizStart(subject, topic) {
         alert("Please select both a subject and a topic.");
         return;
     }
-    // Assumes showModal is globally available or imported in index.html script block
     hideModal(); 
     startNewQuiz(subject, topic);
 }
 
-// Placeholder for dynamically generated selection UI (would be built here)
+// Handler for static buttons/dropdowns in the modal
 if (selectionContent) {
-    // Example: Add a simple handler for static buttons/dropdowns in the modal
     selectionContent.addEventListener('click', (e) => {
         if (e.target.dataset.action === 'start-static-quiz') {
             const subject = e.target.dataset.subject || 'History';
@@ -61,7 +60,7 @@ if (remixQuizBtn) {
             // 2. Call the AI API
             const newQuestions = await generateRemixQuiz({ subject: "Remixed", topic: topic }, exampleSchema, count);
             
-            // 3. Add to the database (db.js handles indexing)
+            // 3. Add to the database
             await addQuestions(newQuestions); 
             
             alert(`Successfully generated and added ${newQuestions.length} new questions on: ${topic}!`);
@@ -80,7 +79,7 @@ if (remixQuizBtn) {
 }
 
 
-// --- 3. Settings Management (API Key BYOK) ---
+// --- 3. Settings Management (UPDATED Logic) ---
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
         const apiKey = apiKeyInput.value.trim();
@@ -91,27 +90,32 @@ if (saveSettingsBtn) {
         }
 
         saveSettingsBtn.disabled = true;
-        settingsStatus.textContent = "Saving key and testing connection...";
+        settingsStatus.textContent = "Verifying key...";
+        settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-blue-600";
 
         try {
-            await saveApiKey(apiKey); // Saves to IndexedDB and tries to initialize model
+            // Save and Try to Init
+            await saveApiKey(apiKey); 
             const isInitialized = await initializeGenerativeModel();
 
             if (isInitialized) {
-                settingsStatus.textContent = "API Key saved and verified! AI features are now active.";
-                settingsStatus.classList.remove('text-red-500');
-                settingsStatus.classList.add('text-green-500');
+                settingsStatus.textContent = "Success! AI Active. Closing...";
+                settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-green-600 font-bold";
+                
+                // UX FIX: Auto-close after 1.5 seconds so user isn't stuck
+                setTimeout(() => {
+                    hideModal();
+                    saveSettingsBtn.disabled = false;
+                    settingsStatus.textContent = ""; // Clear status for next time
+                }, 1500);
             } else {
-                settingsStatus.textContent = "Key saved, but connection failed. Check the key and network.";
-                settingsStatus.classList.remove('text-green-500');
-                settingsStatus.classList.add('text-red-500');
+                throw new Error("Key saved, but AI failed to respond.");
             }
         } catch (error) {
              logError('SETTINGS_SAVE_FAIL', error);
-             settingsStatus.textContent = `Error: Failed to save key. ${error.message}`;
-             settingsStatus.classList.add('text-red-500');
-        } finally {
-            saveSettingsBtn.disabled = false;
+             settingsStatus.textContent = "Invalid Key or Network Error.";
+             settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-red-500 font-bold";
+             saveSettingsBtn.disabled = false;
         }
     });
 }
