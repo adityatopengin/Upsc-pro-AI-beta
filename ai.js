@@ -1,4 +1,4 @@
-// ai.js - Client-Side AI Integration (Full Functional Mode)
+// ai.js - Client-Side AI Integration (Complete & Fixed)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
@@ -16,11 +16,13 @@ const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 let genAI = null;
 let activeModelName = null;
 
-// 1. Initialization (Passive - only runs when called)
+// --- 1. Initialization (Passive) ---
 export async function initializeGenerativeModel() {
     const apiKey = await getSetting(GEMINI_API_KEY_DB_KEY);
     
-    if (!apiKey) return { success: false, error: "No API Key found." };
+    if (!apiKey) {
+        return { success: false, error: "No API Key found." };
+    }
 
     try {
         genAI = new GoogleGenerativeAI(apiKey);
@@ -50,7 +52,7 @@ export async function saveApiKey(key) {
     return await initializeGenerativeModel();
 }
 
-// 2. Helpers
+// --- 2. Helpers ---
 function extractJson(text) {
     try {
         let cleanText = text.replace(/^```json/, '').replace(/```$/, '').trim();
@@ -62,7 +64,26 @@ function extractJson(text) {
     }
 }
 
-// 3. AI Features
+// --- 3. AI Features (ALL FUNCTIONS RESTORED) ---
+
+// Feature A: Socratic Tutor (Used by page-quiz.js)
+export async function generateSocraticExplanation(question, userSelections, correctSelections) {
+    if (!activeModelName) await initializeGenerativeModel();
+    if (!activeModelName) return "Error: AI not active. Check Settings.";
+
+    const systemInstruction = "Explain why the user's choice is wrong. Be concise.";
+    const userPrompt = `User: [${userSelections}]. Correct: [${correctSelections}]. Q: ${question.question_text}`;
+    
+    try {
+        const model = genAI.getGenerativeModel({ model: activeModelName, systemInstruction });
+        const result = await model.generateContent(userPrompt);
+        return result.response.text();
+    } catch (error) {
+        return `Error: ${error.message}`;
+    }
+}
+
+// Feature B: Remix Quiz (Used by page-selection.js)
 export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
@@ -79,6 +100,21 @@ export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     }
 }
 
+// Feature C: Vision Notes (Used by page-notes.js)
+export async function generateNotesFromDiagram(base64Image, mimeType, promptText) {
+    if (!activeModelName) await initializeGenerativeModel();
+    if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
+
+    try {
+        const model = genAI.getGenerativeModel({ model: activeModelName });
+        const result = await model.generateContent([promptText, { inlineData: { data: base64Image, mimeType } }]);
+        return result.response.text();
+    } catch (error) {
+        throw new Error(error.message);
+    }
+}
+
+// Feature D: Mains Grader (Used by UI)
 export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, maxMarks = 10) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
