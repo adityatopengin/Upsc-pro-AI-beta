@@ -1,4 +1,4 @@
-// ai.js - Client-Side AI Integration (Working Models + Stable Architecture)
+// ai.js - Client-Side AI Integration (Final Stable Version)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
@@ -6,7 +6,7 @@ import { APP_CONFIG } from './core.js';
 
 // --- WORKING MODEL LIST (Confirmed Dec 2025) ---
 const MODEL_PRIORITY_LIST = [
-    'gemini-2.5-flash-lite',  // Confirmed Working & High Quota
+    'gemini-2.5-flash-lite',  // Primary: High Quota & Fast
     'gemini-2.5-flash',       // Backup
     'gemini-1.5-flash-002',   // Legacy Backup
     'gemini-1.5-pro-002'      // Legacy Pro
@@ -134,7 +134,4 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
         throw new Error(error.message);
     }
 }
-
-// REMOVED: document.addEventListener('DOMContentLoaded'...) 
-// This prevents the "Race Condition" bug.
 
