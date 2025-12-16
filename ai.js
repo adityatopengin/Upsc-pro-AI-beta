@@ -1,76 +1,28 @@
-// ai.js - Client-Side AI Integration (Dynamic Model Discovery)
+// ai.js - Client-Side AI Integration (Fixed for Dec 2025)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
 import { logError, APP_CONFIG } from './core.js'; 
+
+// --- CRITICAL UPDATE: MODEL LIST (Dec 2025) ---
+const MODEL_PRIORITY_LIST = [
+    // 1. BEST FOR FREE TIER (High Quota: ~1000/day)
+    'gemini-2.5-flash-lite', 
+    
+    // 2. BACKUP (High Speed, but Low Free Quota: ~20/day)
+    'gemini-2.5-flash',      
+
+    // 3. LEGACY FALLBACKS (If 2.5 fails)
+    'gemini-1.5-flash-002',   
+    'gemini-1.5-pro-002'
+];
 
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 
 let genAI = null;
 let activeModelName = null;
 
-// --- 1. Dynamic Model Discovery ---
-// This mimics the Python `genai.list_models()` but for the Web
-async function fetchBestAvailableModel(apiKey) {
-    try {
-        console.log("[AI] Asking Google for available models...");
-        
-        // Direct REST call to get the list (Works where SDK fails)
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        
-        if (!response.ok) {
-            throw new Error(`Failed to list models: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const allModels = data.models || [];
-
-        // Filter: Must support 'generateContent'
-        const validModels = allModels.filter(m => 
-            m.supportedGenerationMethods && 
-            m.supportedGenerationMethods.includes("generateContent")
-        );
-
-        if (validModels.length === 0) throw new Error("No text generation models available for this key.");
-
-        // Smart Ranking Logic:
-        // 1. Prefer 'flash' (Speed is king for PWA)
-        // 2. Prefer higher version numbers (2.0 > 1.5 > 1.0)
-        // 3. Avoid 'vision' only models if possible (though most are multimodal now)
-        
-        const sortedModels = validModels.sort((a, b) => {
-            const nameA = a.name.toLowerCase();
-            const nameB = b.name.toLowerCase();
-
-            // Check version (simple heuristic)
-            const verA = nameA.includes('1.5') ? 1.5 : (nameA.includes('2.0') ? 2.0 : 1.0);
-            const verB = nameB.includes('1.5') ? 1.5 : (nameB.includes('2.0') ? 2.0 : 1.0);
-
-            if (verA !== verB) return verB - verA; // Higher version first
-
-            // If same version, prefer Flash
-            const isFlashA = nameA.includes('flash');
-            const isFlashB = nameB.includes('flash');
-            if (isFlashA && !isFlashB) return -1;
-            if (!isFlashA && isFlashB) return 1;
-
-            return 0;
-        });
-
-        // The name comes like "models/gemini-1.5-flash". We need just "gemini-1.5-flash"
-        const bestModel = sortedModels[0].name.replace('models/', '');
-        
-        console.log(`[AI] Discovery Complete. Best Model: ${bestModel}`);
-        return bestModel;
-
-    } catch (error) {
-        console.warn("[AI] Model discovery failed. Falling back to safe default.", error);
-        return 'gemini-1.5-flash'; // Fallback if list fails
-    }
-}
-
-
-// --- 2. Initialization ---
+// --- 1. Initialization ---
 export async function initializeGenerativeModel() {
     const apiKey = await getSetting(GEMINI_API_KEY_DB_KEY);
     
@@ -79,21 +31,33 @@ export async function initializeGenerativeModel() {
     }
 
     try {
-        // Step 1: Initialize SDK
         genAI = new GoogleGenerativeAI(apiKey);
         
-        // Step 2: Dynamically find the best model for this specific Key
-        activeModelName = await fetchBestAvailableModel(apiKey);
-        
-        // Step 3: Test it with a tiny ping
-        const model = genAI.getGenerativeModel({ model: activeModelName });
-        await model.generateContent("Test"); 
-        
-        console.log(`[AI] System Locked & Loaded on: ${activeModelName}`);
-        return { success: true, model: activeModelName }; 
+        let lastError = null;
 
-    } catch (error) {
-        return { success: false, error: `Init Failed (${activeModelName || 'Unknown'}): ${error.message}` };
+        // Try models in order until one connects
+        for (const modelName of MODEL_PRIORITY_LIST) {
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName });
+                // Tiny Ping to verify access
+                await model.generateContent("Test"); 
+                
+                // If we get here, it worked!
+                activeModelName = modelName;
+                console.log(`[AI] Connected to: ${activeModelName}`);
+                return { success: true, model: activeModelName }; 
+                
+            } catch (e) {
+                console.warn(`[AI] ${modelName} failed. Reason: ${e.message}`);
+                lastError = e.message;
+            }
+        }
+        
+        // If ALL failed
+        return { success: false, error: `Connection failed. Check API Key or Quota. Last Error: ${lastError}` };
+
+    } catch (criticalError) {
+        return { success: false, error: `Init Error: ${criticalError.message}` };
     }
 }
 
@@ -102,8 +66,7 @@ export async function saveApiKey(key) {
     return await initializeGenerativeModel();
 }
 
-
-// --- 3. Helpers ---
+// --- 2. Helpers ---
 function extractJson(text) {
     try {
         let cleanText = text.replace(/^```json/, '').replace(/```$/, '').trim();
@@ -115,8 +78,8 @@ function extractJson(text) {
     }
 }
 
+// --- 3. AI Features ---
 
-// --- 4. AI Features ---
 export async function generateSocraticExplanation(question, userSelections, correctSelections) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) return "Error: AI not active.";
