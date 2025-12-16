@@ -1,4 +1,4 @@
-// ai.js - Client-Side AI Integration (Reasoning + CA Generator)
+// ai.js - Client-Side AI Integration (Reasoning + CA Generator + News Scanner)
 
 import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
@@ -34,9 +34,7 @@ export async function initializeGenerativeModel() {
     if (!apiKey) return { success: false, error: "No API Key found." };
 
     try {
-        // We use the standard Web SDK, which supports v1beta/thinking models
         genAI = new GoogleGenerativeAI(apiKey);
-        
         let lastError = null;
 
         // Loop through models to find the smartest one available
@@ -45,14 +43,9 @@ export async function initializeGenerativeModel() {
                 console.log(`[AI] Handshaking with: ${modelName}...`);
                 
                 const model = genAI.getGenerativeModel({ model: modelName });
-                
-                // Tiny Ping to verify access
                 await model.generateContent("Test"); 
                 
-                // Success!
                 activeModelName = modelName;
-                
-                // Check if it is a "Thinking" model (contains 'thinking' or user's requested '3-pro')
                 isThinkingModel = modelName.includes('thinking') || modelName.includes('3-pro');
 
                 console.log(`[AI] Connected! Model: ${activeModelName} | Reasoning Mode: ${isThinkingModel ? 'ON' : 'OFF'}`);
@@ -94,7 +87,6 @@ export async function generateSocraticExplanation(question, userSelections, corr
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) return "Error: Aditya is offline. Check Settings.";
 
-    // The "Aditya" Persona Prompt
     const systemInstruction = `
     You are Aditya, a dedicated UPSC mentor. You have a friendly, encouraging personality using modern Indian English (Hinglish).
     
@@ -120,18 +112,12 @@ export async function generateSocraticExplanation(question, userSelections, corr
     `;
     
     try {
-        // DYNAMIC CONFIGURATION
         let modelParams = { model: activeModelName };
         if (!isThinkingModel) {
             modelParams.systemInstruction = systemInstruction;
         }
-
         const model = genAI.getGenerativeModel(modelParams);
-
-        // Inject persona into prompt for Thinking models (as they sometimes ignore systemInstruction)
-        const finalPrompt = isThinkingModel 
-            ? `${systemInstruction}\n\n${userPrompt}` 
-            : userPrompt;
+        const finalPrompt = isThinkingModel ? `${systemInstruction}\n\n${userPrompt}` : userPrompt;
 
         const result = await model.generateContent(finalPrompt);
         return result.response.text();
@@ -194,7 +180,7 @@ export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, max
     }
 }
 
-// Feature E: Daily Current Affairs Generator (NEW)
+// Feature E: Daily Current Affairs Generator
 export async function generateCurrentAffairsQuiz(exampleSchema) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
@@ -204,11 +190,8 @@ export async function generateCurrentAffairsQuiz(exampleSchema) {
     const systemInstruction = `
     You are a Senior UPSC Question Setter. 
     Task: Create a 'Current Affairs Mini-Mock' for UPSC Prelims 2026.
-    
-    CONTEXT:
-    - Current Date: ${today}
-    - Focus Period: Events from the last 30 days.
-    - Difficulty: High (UPSC Standard).
+    CONTEXT: Current Date: ${today}. Focus Period: Last 30 days.
+     - Difficulty: High (UPSC Standard).
     
     STRICT GUIDELINES:
     1. Generate exactly 5 Questions.
@@ -227,12 +210,49 @@ export async function generateCurrentAffairsQuiz(exampleSchema) {
     
     try {
         const model = genAI.getGenerativeModel({ model: activeModelName });
-        
-        // Combine prompt for robustness
+        const finalPrompt = `${systemInstruction}\n\n${userPrompt}`;
+        const result = await model.generateContent(finalPrompt);
+        return extractJson(result.response.text());
+    } catch (error) {
+        throw new Error(error.message);
+    }
+}
+
+// Feature F: News Scanner (NEW - for News Analysis)
+export async function generateNewsAnalysis(inputText) {
+    if (!activeModelName) await initializeGenerativeModel();
+    if (!activeModelName) throw new Error("AI not active. Connect Key in Settings.");
+
+    const systemInstruction = `
+    You are Aditya, an expert UPSC Mentor.
+    TASK: Analyze the user's news text/topic for UPSC CSE (Mains & Prelims).
+    
+    OUTPUT FORMAT (Markdown):
+    1. 🎯 **Tags**: [GS Paper X], [Subject]
+    2. 📰 **Why in News?**: 1 crisp sentence.
+    3. 🧠 **Core Analysis**: 
+       - Explain the concept/issue in 3-4 bullets.
+       - **Bold** key terms (e.g., **Fiscal Deficit**, **Article 21**).
+       - Mention ONE static syllabus linkage.
+    4. ⚖️ **Pros/Cons** (if applicable) or **Key Data**.
+    5. 🚀 **Way Forward**: 2 actionable points.
+    6. ✍️ **Mains Practice**:
+       - Q1: [Question text] (10 Marks)
+       - Q2: [Question text] (10 Marks)
+    7. 📜 **PYQ Reference**: Quote a relevant UPSC PYQ (Year) if exists. If not, skip.
+
+    CONSTRAINT: Keep it concise. Max 400 words. structured. eye-catching.
+    `;
+
+    const userPrompt = `Analyze this: "${inputText}"`;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: activeModelName });
+        // Concatenate for robustness with all model types
         const finalPrompt = `${systemInstruction}\n\n${userPrompt}`;
         
         const result = await model.generateContent(finalPrompt);
-        return extractJson(result.response.text());
+        return result.response.text();
     } catch (error) {
         throw new Error(error.message);
     }
