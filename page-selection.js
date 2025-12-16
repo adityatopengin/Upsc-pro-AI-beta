@@ -1,77 +1,53 @@
-// page-selection.js - Debug Version with "Loud" Alerts
+// page-selection.js - Full Functionality with Robust Event Handling
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
 import { getSetting, addQuestions } from './db.js'; 
 import { hideModal } from './ui-common.js'; 
 
-// 1. PROOF OF LIFE: This runs immediately when the file loads.
-// If you do NOT see this alert on reload, it means there is a syntax error in 'ai.js' or 'db.js'.
-alert("DEBUG: page-selection.js has loaded successfully!"); 
-
-// Initialize (Pre-fill Key)
+// 1. Pre-fill API Key (Quietly)
 (async function init() {
     try {
         const existingKey = await getSetting(APP_CONFIG.GEMINI_API_KEY_NAME);
         const input = document.getElementById('api-key-input');
-        if (input && existingKey) {
-            input.value = existingKey;
-        }
+        if (input && existingKey) input.value = existingKey;
     } catch (e) {
-        console.warn("Could not load settings:", e);
+        console.warn("Settings init error:", e);
     }
 })();
 
-// 2. GLOBAL LISTENER (Catches clicks anywhere on the screen)
+// 2. GLOBAL EVENT LISTENER (The Fail-Safe)
 document.addEventListener('click', async (e) => {
     
-    // --- A. Handle "Connect AI" Button ---
-    // We check if the thing you clicked is the Settings Button
+    // --- A. CONNECT AI BUTTON ---
     const settingsBtn = e.target.closest('#save-settings-btn');
-    
     if (settingsBtn) {
-        // Prevent double clicks
         if (settingsBtn.disabled) return;
-
-        // DEBUG STEP 1: Confirm the button works
-        alert("DEBUG STEP 1: Button Click Detected!");
 
         const apiKeyInput = document.getElementById('api-key-input');
         const settingsStatus = document.getElementById('settings-status');
         const apiKey = apiKeyInput.value.trim();
 
         if (!apiKey) {
-            alert("DEBUG: No API Key entered.");
             settingsStatus.textContent = "Please enter an API key.";
             return;
         }
 
-        // UI Feedback
         settingsBtn.disabled = true;
         settingsBtn.textContent = "Loading...";
-        settingsStatus.textContent = "Initializing System...";
+        settingsStatus.textContent = "Initializing...";
         settingsStatus.className = "text-xs mb-3 text-blue-400";
 
         try {
-            // DEBUG STEP 2: Trying to load the AI file
-            alert("DEBUG STEP 2: Attempting to import ai.js...");
-            
-            // Dynamic Import
+            // Lazy Load AI to prevent startup crashes
             const aiModule = await import('./ai.js');
-            
-            // DEBUG STEP 3: File imported, calling connection function
-            alert("DEBUG STEP 3: ai.js loaded. Verifying key...");
             
             settingsBtn.textContent = "Verifying...";
             const result = await aiModule.saveApiKey(apiKey); 
 
-            // DEBUG STEP 4: Got result from Google
-            alert(`DEBUG STEP 4: Result received. Success: ${result.success}`);
-
             if (result.success) {
                 settingsStatus.textContent = `Connected! Model: ${result.model}`;
                 settingsStatus.className = "text-xs mb-3 text-green-400 font-bold";
-                
                 setTimeout(() => {
                     hideModal();
                     settingsBtn.disabled = false;
@@ -79,41 +55,30 @@ document.addEventListener('click', async (e) => {
                     settingsStatus.textContent = ""; 
                 }, 1500);
             } else {
-                settingsStatus.textContent = `Failed: ${result.error}`;
-                settingsStatus.className = "text-xs mb-3 text-red-400 font-bold break-words";
-                settingsBtn.disabled = false;
-                settingsBtn.textContent = "Retry Connection";
-                alert("DEBUG ERROR: " + result.error);
+                throw new Error(result.error);
             }
         } catch (error) {
-             // Catch import errors (Internet/Syntax)
-             console.error("Import failed:", error);
-             settingsStatus.textContent = "Error loading AI module.";
-             
-             alert("DEBUG CRITICAL ERROR:\n" + error.message);
-             
+             console.error(error);
+             settingsStatus.textContent = "Error: " + error.message;
              settingsBtn.disabled = false;
-             settingsBtn.textContent = "Connect AI";
+             settingsBtn.textContent = "Retry Connection";
         }
         return; 
     }
 
-    // --- B. Handle "AI Remix" Button ---
+    // --- B. AI REMIX BUTTON ---
     const remixBtn = e.target.closest('#remix-quiz-btn');
     if (remixBtn) {
-        const topicInput = document.getElementById('remix-topic-input');
-        const countInput = document.getElementById('remix-count-input');
-        const topic = topicInput.value.trim();
-        const count = parseInt(countInput.value);
+        const topic = document.getElementById('remix-topic-input').value.trim();
+        const count = parseInt(document.getElementById('remix-count-input').value);
 
-        if (!topic) { alert("Please enter a topic."); return; }
+        if (!topic) { alert("Enter a topic."); return; }
 
         remixBtn.disabled = true;
-        remixBtn.textContent = "Loading AI...";
+        remixBtn.textContent = "Generating...";
 
         try {
             const aiModule = await import('./ai.js');
-            remixBtn.textContent = "Generating...";
             const existingQuestions = await fetchInitialQuestions();
             const exampleSchema = existingQuestions.slice(0, 1); 
 
@@ -131,18 +96,16 @@ document.addEventListener('click', async (e) => {
             alert(`AI Failed: ${error.message}`);
         } finally {
             remixBtn.disabled = false;
-            remixBtn.textContent = 'Generate & Start Remix Quiz';
+            remixBtn.textContent = '✨ AI Generate';
         }
         return;
     }
 
-    // --- C. Handle "Static Quiz" Buttons ---
+    // --- C. STATIC QUIZ BUTTONS ---
     const staticBtn = e.target.closest('button[data-action="start-static-quiz"]');
     if (staticBtn) {
-        const subject = staticBtn.dataset.subject;
-        const topic = staticBtn.dataset.topic;
         hideModal();
-        startNewQuiz(subject, topic);
+        startNewQuiz(staticBtn.dataset.subject, staticBtn.dataset.topic);
     }
 });
 
