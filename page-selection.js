@@ -1,16 +1,14 @@
 // page-selection.js - Logic for Quiz Selection & Settings
-// (Robust "Lazy Load" Version - Fixes the Dead Button)
+// (Architecture: Direct Execution + Lazy Loading)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
 import { getSetting, addQuestions } from './db.js'; 
 import { hideModal } from './ui-common.js'; 
 
-// Note: We do NOT import ai.js here anymore. We load it dynamically.
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Debug: If you see this in console, the file is alive!
-    console.log("Page Selection Logic: Alive and Ready");
+// --- Core Logic Function ---
+function initPageLogic() {
+    console.log("[Page Logic] Initializing...");
 
     // --- DOM Elements ---
     const selectionContent = document.getElementById('quiz-selection-content');
@@ -25,13 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
     getSetting(APP_CONFIG.GEMINI_API_KEY_NAME).then(existingKey => {
         if (apiKeyInput && existingKey) {
             apiKeyInput.value = existingKey;
+            console.log("[Page Logic] Existing key pre-filled");
         }
     });
 
     // --- 2. Quiz Selection (Static) ---
     if (selectionContent) {
         selectionContent.addEventListener('click', (e) => {
-            // Event Delegation: Check if clicked element is our button
             const btn = e.target.closest('button');
             if (!btn) return;
 
@@ -47,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 3. AI Remix Quiz (Lazy Load AI) ---
+    // --- 3. AI Remix Quiz (Lazy Load) ---
     if (remixQuizBtn) {
         remixQuizBtn.addEventListener('click', async () => {
             const topic = remixTopicInput.value.trim();
@@ -59,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
             remixQuizBtn.textContent = "Loading AI Module...";
             
             try {
-                // DYNAMIC IMPORT: Load AI only when needed
+                // Dynamic Import
                 const aiModule = await import('./ai.js');
                 
                 remixQuizBtn.textContent = "Generating...";
@@ -78,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             } catch (error) {
                 console.error(error);
-                alert(`AI Failed: ${error.message}. Check Internet.`);
+                alert(`AI Failed: ${error.message}`);
             } finally {
                 remixQuizBtn.disabled = false;
                 remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
@@ -86,9 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 4. Settings (Lazy Load AI) ---
+    // --- 4. Settings & AI Connection (The Critical Fix) ---
     if (saveSettingsBtn) {
+        console.log("[Page Logic] Settings Button Found - Attaching Listener");
+        
         saveSettingsBtn.addEventListener('click', async () => {
+            console.log("[UI] Settings Button Clicked");
             const apiKey = apiKeyInput.value.trim();
             
             if (!apiKey) {
@@ -96,18 +97,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Visual Feedback
+            // UI Feedback
             saveSettingsBtn.disabled = true;
-            saveSettingsBtn.textContent = "Loading AI Brain...";
+            saveSettingsBtn.textContent = "Loading AI...";
             settingsStatus.textContent = "Initializing System...";
             settingsStatus.className = "text-xs mb-3 text-blue-400";
 
             try {
-                // DYNAMIC IMPORT: This is the magic fix.
-                // It tries to load ai.js NOW. If it fails, we catch the error here.
+                // DYNAMIC IMPORT: Loads ai.js only on click
                 const aiModule = await import('./ai.js');
                 
-                saveSettingsBtn.textContent = "Verifying Key...";
+                saveSettingsBtn.textContent = "Verifying...";
                 const result = await aiModule.saveApiKey(apiKey); 
 
                 if (result.success) {
@@ -127,15 +127,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     saveSettingsBtn.textContent = "Retry Connection";
                 }
             } catch (error) {
-                 // This catches if the file ./ai.js fails to load entirely (Network error)
-                 settingsStatus.textContent = `System Error: Could not load AI module.`;
+                 settingsStatus.textContent = `Error: Could not load AI library. Check Internet.`;
                  console.error("Import failed:", error);
-                 alert("Error: Your internet might be blocking the Google AI library.\n" + error.message);
-                 
                  saveSettingsBtn.disabled = false;
                  saveSettingsBtn.textContent = "Connect AI";
             }
         });
+    } else {
+        console.warn("[Page Logic] Save Settings Button NOT found in DOM");
     }
-});
+}
+
+// --- BOOTSTRAP (The "Race Condition" Fix) ---
+// If the DOM is already ready, run NOW. If not, wait.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPageLogic);
+} else {
+    initPageLogic(); // Run immediately
+}
 
