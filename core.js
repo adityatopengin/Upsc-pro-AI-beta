@@ -3,7 +3,7 @@
 // --- Global Constants ---
 export const APP_CONFIG = {
     DEFAULT_DATA_SOURCE: 'data/initial_questions.json', 
-    GEMINI_API_KEY_NAME: 'geminiApiKey', 
+    GEMINI_API_KEY_NAME: 'gemini-api-key', 
 };
 
 // --- Tailwind Theme Safety Map (Phase 4 Fix) ---
