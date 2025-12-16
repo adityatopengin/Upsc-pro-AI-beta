@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>UPSC Pro - Glass UI</title>
+
+    <script>
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            const box = document.createElement('div');
+            box.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:white;z-index:99999;padding:20px;font-family:monospace;font-size:12px;overflow:auto;max-height:50vh;';
+            box.innerHTML = `<strong>CRITICAL ERROR:</strong><br>${msg}<br>File: ${url ? url.split('/').pop() : 'Unknown'}<br>Line: ${lineNo}`;
+            document.body.appendChild(box);
+            return false;
+        };
+    </script>
 
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#4f46e5"> 
     <link rel="icon" type="image/x-icon" href="/favicon.ico"> 
-    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://unpkg.com/flexsearch@0.7.3/dist/flexsearch.compact.js"></script> 
@@ -23,28 +28,16 @@
     <script>
         tailwind.config = {
             theme: {
-                fontFamily: {
-                    sans: ['Poppins', 'sans-serif'],
-                },
+                fontFamily: { sans: ['Poppins', 'sans-serif'] },
                 extend: {
-                    colors: {
-                        glass: 'rgba(255, 255, 255, 0.1)',
-                        glassBorder: 'rgba(255, 255, 255, 0.2)',
-                        primary: '#6366f1', // Indigo 500
-                        secondary: '#f43f5e', // Rose 500
-                    }
+                    colors: { glass: 'rgba(255, 255, 255, 0.1)' }
                 }
             }
         }
     </script>
 
     <style>
-        /* Custom Scrollbar for Glass Look */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
-        
-        /* Animated Mesh Gradient Background */
+        /* Modern Glass Styles */
         body {
             background-color: #0f172a;
             background-image: 
@@ -53,208 +46,122 @@
                 radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
             background-attachment: fixed;
             background-size: cover;
+            color: #f3f4f6;
         }
-        
-        /* Glass Card Utility */
         .glass-panel {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
         .glass-input {
             background: rgba(0, 0, 0, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.1);
             color: white;
         }
-        .glass-input::placeholder { color: rgba(255, 255, 255, 0.4); }
         .glass-input:focus { outline: none; border-color: #6366f1; background: rgba(0, 0, 0, 0.4); }
     </style>
 </head>
-<body class="text-gray-100 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
-
-    <div id="initial-loading-overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-500 glass-panel bg-black/80">
-        <h1 class="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400 animate-pulse">
-            UPSC Pro
-        </h1>
-        <p class="text-lg mt-4 text-gray-400 font-light tracking-wider">Initializing Neural Engine...</p>
-    </div>
+<body class="min-h-screen">
 
     <div id="app-container" class="max-w-xl mx-auto p-4 min-h-screen flex flex-col">
         
-        <header class="p-4 mb-6 rounded-2xl shadow-2xl glass-panel flex justify-between items-center sticky top-2 z-30">
-            <div>
-                <h1 class="text-xl font-bold text-white tracking-wide">UPSC<span class="text-indigo-400">Pro</span></h1>
-            </div>
-            
+        <header class="p-4 mb-6 rounded-2xl shadow-xl glass-panel flex justify-between items-center sticky top-2 z-30">
+            <h1 class="text-xl font-bold tracking-wide">UPSC<span class="text-indigo-400">Pro</span></h1>
             <div class="flex space-x-2">
-                <button onclick="showModal('mains-grader-content')" class="p-2 rounded-full hover:bg-white/10 transition border border-transparent hover:border-white/20" title="Grade Mains">
-                    ⚖️
-                </button>
-                <button onclick="showModal('settings-content')" class="p-2 rounded-full hover:bg-white/10 transition border border-transparent hover:border-white/20" title="Settings">
-                    ⚙️
-                </button>
+                <button onclick="showModal('mains-grader-content')" class="p-2 rounded-full hover:bg-white/10 transition">⚖️</button>
+                <button onclick="showModal('settings-content')" class="p-2 rounded-full hover:bg-white/10 transition">⚙️</button>
             </div>
         </header>
 
         <main id="content-area" class="flex-grow">
-            
-            <div class="mb-8 text-center py-8">
-                <button id="start-quiz-btn" onclick="showModal('quiz-selection-content')" 
-                        class="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-bold shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-105 transition transform duration-200 border border-white/10">
+            <div class="mb-8 text-center py-4">
+                <button onclick="showModal('quiz-selection-content')" 
+                        class="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-bold shadow-lg hover:scale-105 transition transform">
                     🚀 Start New Quiz
                 </button>
             </div>
 
-            <div class="mb-6 relative group">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span class="text-gray-400">🔍</span>
-                </div>
-                <input type="search" id="search-input" placeholder="Search topics, questions, or notes..." 
-                       class="w-full pl-10 p-4 rounded-xl glass-input transition shadow-inner">
+            <div class="mb-6 relative">
+                <input type="search" id="search-input" placeholder="Search knowledge base..." 
+                       class="w-full p-4 rounded-xl glass-input shadow-inner">
             </div>
 
             <div id="quiz-container" class="hidden">
-                <div id="question-display" class="mb-4 p-6 rounded-2xl glass-panel shadow-2xl">
-                    </div>
-                <div id="options-container" class="mb-6 space-y-3">
-                    </div>
+                <div id="question-display" class="mb-4 p-6 rounded-2xl glass-panel shadow-2xl"></div>
+                <div id="options-container" class="mb-6 space-y-3"></div>
                 <button id="next-button" disabled 
-                        class="w-full py-4 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-orange-500/30 transition">
+                        class="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 transition">
                     Next Question →
                 </button>
             </div>
             
             <div id="home-screen" class="p-6 rounded-3xl glass-panel shadow-2xl">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-xl font-semibold text-white">My Knowledge Base</h2>
-                    <button onclick="showModal('new-note-content')" 
-                            class="py-2 px-4 bg-white/10 hover:bg-white/20 border border-white/20 text-indigo-300 rounded-lg text-sm transition flex items-center gap-1">
-                        <span>+</span> Note
-                    </button>
+                    <h2 class="text-xl font-semibold">My Notes</h2>
+                    <button onclick="showModal('new-note-content')" class="py-2 px-4 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition">+ Note</button>
                 </div>
-                
-                <div id="notes-list-container" class="mt-4 space-y-3 min-h-[100px]">
-                    <p class="text-gray-500 text-center italic mt-8">Your notes will glow here...</p>
+                <div id="notes-list-container" class="mt-4 space-y-3 min-h-[50px]">
+                    <p class="text-gray-500 text-center italic text-sm">Loading notes...</p>
                 </div>
-
-                <div id="search-results-list" class="mt-6 border-t border-white/10 pt-4">
-                    </div>
+                <div id="search-results-list" class="mt-6 border-t border-white/10 pt-4"></div>
             </div>
-
         </main>
     </div>
 
-    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-md hidden opacity-0 transition-opacity z-40"></div>
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden opacity-0 transition-opacity z-40"></div>
     
     <div id="unified-modal-container" class="fixed inset-0 flex items-center justify-center p-4 hidden opacity-0 transition-opacity z-50">
         
-        <div id="quiz-selection-content" class="glass-panel bg-[#1a1f3c]/90 p-8 rounded-3xl w-full max-w-sm hidden shadow-2xl border-white/20">
-            <h3 class="text-2xl font-bold mb-6 text-white text-center">Choose Challenge</h3>
-            
+        <div id="quiz-selection-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-sm hidden">
+            <h3 class="text-xl font-bold mb-4 text-center">Choose Mode</h3>
             <button data-action="start-static-quiz" data-subject="History" data-topic="IVC" 
-                    class="w-full py-3 mb-6 bg-white/5 hover:bg-white/10 border border-white/10 text-indigo-200 rounded-xl transition flex justify-between px-4 items-center group">
-                <span>📚 History: IVC</span>
-                <span class="group-hover:translate-x-1 transition">→</span>
+                    class="w-full py-3 mb-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl transition text-left px-4">
+                📚 History: IVC
             </button>
-            
-            <div class="relative py-2 flex items-center">
-                <div class="flex-grow border-t border-white/10"></div>
-                <span class="flex-shrink-0 mx-4 text-gray-500 text-xs uppercase tracking-widest">OR AI REMIX</span>
-                <div class="flex-grow border-t border-white/10"></div>
-            </div>
-
-            <div class="mt-4">
-                <input type="text" id="remix-topic-input" placeholder="Enter any topic (e.g. Solar System)" 
-                       class="w-full p-3 rounded-lg glass-input mb-3 text-sm">
-                <input type="number" id="remix-count-input" value="5" min="1" max="20" 
-                       class="w-full p-3 rounded-lg glass-input mb-4 text-sm">
-                <button id="remix-quiz-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/40 transition">
-                    ✨ Generate with AI
-                </button>
-            </div>
-            <button onclick="hideModal()" class="w-full mt-4 text-gray-400 hover:text-white text-sm">Cancel</button>
+            <hr class="border-white/10 my-4">
+            <input type="text" id="remix-topic-input" placeholder="Topic (e.g. Solar System)" class="w-full p-3 rounded-lg glass-input mb-3">
+            <input type="number" id="remix-count-input" value="5" class="w-full p-3 rounded-lg glass-input mb-4">
+            <button id="remix-quiz-btn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold shadow-lg">✨ AI Generate</button>
+            <button onclick="hideModal()" class="w-full mt-4 text-gray-400 text-sm">Cancel</button>
         </div>
 
-        <div id="settings-content" class="glass-panel bg-[#1a1f3c]/90 p-8 rounded-3xl w-full max-w-sm hidden shadow-2xl border-white/20">
-            <h3 class="text-xl font-bold mb-4 text-white">⚙️ Settings</h3>
-            <label for="api-key-input" class="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">Gemini API Key</label>
-            <input type="password" id="api-key-input" placeholder="Paste key here..." 
-                   class="w-full p-3 rounded-xl glass-input mb-2 text-sm">
-            
-            <p id="settings-status" class="text-xs h-auto min-h-[1.5rem] mb-4 break-words font-mono"></p>
-            
-            <button id="save-settings-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg transition">
-                Connect AI
-            </button>
-            <button onclick="hideModal()" class="w-full mt-4 py-2 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition text-sm">
-                Close
-            </button>
+        <div id="settings-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-sm hidden">
+            <h3 class="text-xl font-bold mb-4">⚙️ AI Settings</h3>
+            <input type="password" id="api-key-input" placeholder="Paste Gemini API Key..." class="w-full p-3 rounded-xl glass-input mb-3">
+            <p id="settings-status" class="text-xs mb-4 min-h-[20px]"></p>
+            <button id="save-settings-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold shadow-lg">Connect AI</button>
+            <button onclick="hideModal()" class="w-full mt-4 text-gray-400 text-sm">Close</button>
         </div>
         
-        <div id="results-content" class="glass-panel bg-[#1a1f3c]/95 p-8 rounded-3xl w-full max-w-sm hidden shadow-2xl border-white/20 text-center">
-            </div>
+        <div id="results-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-sm hidden text-center"></div>
 
-        <div id="new-note-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-lg hidden shadow-2xl border-white/20" data-editing-id="">
-            <h3 class="text-xl font-bold mb-4 text-indigo-300">📝 Smart Note</h3>
-            
-            <div class="mb-4 p-4 border border-dashed border-white/20 rounded-xl bg-white/5">
-                <label for="diagram-file-input" class="block text-xs font-medium text-gray-400 mb-2">AI VISION: Upload Diagram/Chart</label>
-                <input type="file" id="diagram-file-input" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500">
-            </div>
-
-            <input type="text" id="note-title-input" placeholder="Title..." 
-                   class="w-full p-3 rounded-xl glass-input mb-3 font-semibold">
-
-            <textarea id="note-text-input" rows="6" placeholder="Write notes here (Markdown supported)..." 
-                      class="w-full p-3 rounded-xl glass-input mb-4 text-sm font-light"></textarea>
-
-            <button id="save-note-button" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition">
-                Save Note
-            </button>
-            <button onclick="hideModal()" class="w-full mt-2 text-gray-400 hover:text-white text-sm">Discard</button>
+        <div id="new-note-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-lg hidden">
+            <h3 class="text-lg font-bold mb-4">📝 New Note</h3>
+            <input type="file" id="diagram-file-input" accept="image/*" class="w-full text-sm text-gray-400 mb-4">
+            <input type="text" id="note-title-input" placeholder="Title..." class="w-full p-3 rounded-xl glass-input mb-3">
+            <textarea id="note-text-input" rows="6" placeholder="Content..." class="w-full p-3 rounded-xl glass-input mb-4"></textarea>
+            <button id="save-note-button" class="w-full py-3 bg-indigo-600 rounded-xl font-bold">Save</button>
+            <button onclick="hideModal()" class="w-full mt-2 text-gray-400 text-sm">Discard</button>
         </div>
 
-        <div id="mains-grader-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-2xl hidden shadow-2xl border-white/20 max-h-[90vh] overflow-y-auto">
-            <h3 class="text-xl font-bold mb-4 text-white">⚖️ Mains Grader</h3>
-            
-            <form id="mains-grader-form" class="space-y-4">
-                <div>
-                    <label class="text-xs text-gray-400 uppercase">Question</label>
-                    <textarea id="grader-question" rows="2" class="w-full p-3 rounded-xl glass-input mt-1"></textarea>
-                </div>
-
-                <div>
-                    <label class="text-xs text-gray-400 uppercase">Model Answer / Rubric</label>
-                    <textarea id="grader-model-key" rows="3" class="w-full p-3 rounded-xl glass-input mt-1"></textarea>
-                </div>
-                
-                <div>
-                    <label class="text-xs text-gray-400 uppercase">Your Answer</label>
-                    <textarea id="grader-user-answer" rows="8" class="w-full p-3 rounded-xl glass-input mt-1 border-indigo-500/50"></textarea>
-                </div>
-
-                <p id="grader-status" class="text-indigo-400 text-sm h-6 animate-pulse"></p>
-
-                <button type="submit" id="grade-answer-btn" 
-                        class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg transition">
-                    Analyze with AI
-                </button>
+        <div id="mains-grader-content" class="glass-panel bg-[#1a1f3c]/95 p-6 rounded-3xl w-full max-w-2xl hidden overflow-y-auto max-h-[85vh]">
+            <h3 class="text-lg font-bold mb-4">⚖️ Mains Grader</h3>
+            <form id="mains-grader-form" class="space-y-3">
+                <textarea id="grader-question" rows="2" placeholder="Question..." class="w-full p-3 rounded-xl glass-input"></textarea>
+                <textarea id="grader-model-key" rows="3" placeholder="Model Answer / Key Points..." class="w-full p-3 rounded-xl glass-input"></textarea>
+                <textarea id="grader-user-answer" rows="6" placeholder="Your Answer..." class="w-full p-3 rounded-xl glass-input border-indigo-500/50"></textarea>
+                <p id="grader-status" class="text-sm text-indigo-400 animate-pulse h-6"></p>
+                <button type="submit" id="grade-answer-btn" class="w-full py-3 bg-indigo-600 rounded-xl font-bold">Grade Answer</button>
             </form>
-
-            <div id="grader-results-display" class="w-full mt-6 p-6 bg-black/30 rounded-xl border border-white/10 hidden">
-                <div class="flex items-center justify-between mb-4">
-                    <h4 class="text-lg font-bold text-gray-200">Evaluation Report</h4>
-                    <span id="final-grader-score" class="text-3xl font-extrabold text-emerald-400">--</span>
-                </div>
-                <div id="final-grader-feedback" class="text-sm text-gray-300 leading-relaxed prose prose-invert max-w-none"></div>
+            <div id="grader-results-display" class="mt-4 p-4 bg-black/20 rounded-xl hidden">
+                <span id="final-grader-score" class="text-2xl font-bold text-emerald-400 block mb-2"></span>
+                <div id="final-grader-feedback" class="text-sm text-gray-300"></div>
             </div>
-            <button onclick="hideModal()" class="w-full mt-6 py-2 border border-white/10 rounded-lg text-gray-400 hover:text-white text-sm">Close Grader</button>
+            <button onclick="hideModal()" class="w-full mt-4 text-gray-400 text-sm">Close</button>
         </div>
-
     </div>
-    
+
     <script type="module" src="./db.js"></script>
     <script type="module" src="./core.js"></script>
     <script type="module" src="./ui-common.js"></script>
@@ -265,101 +172,13 @@
     <script type="module">
         import { showModal, hideModal } from './ui-common.js';
         import { startNewQuiz } from './page-quiz.js';
-        import { fullTextSearchQuestions } from './db.js';
-        import { gradeMainsAnswer } from './ai.js'; 
-        
-        // Expose to HTML buttons
         window.showModal = showModal;
         window.hideModal = hideModal;
         window.startNewQuiz = startNewQuiz;
 
-        // Register Service Worker
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js').catch(err => console.log('SW Fail', err));
-            });
+            navigator.serviceWorker.register('./service-worker.js').catch(console.error);
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const searchInput = document.getElementById('search-input');
-            const resultsList = document.getElementById('search-results-list');
-            const graderForm = document.getElementById('mains-grader-form');
-            const graderStatus = document.getElementById('grader-status');
-            const graderResultsDisplay = document.getElementById('grader-results-display');
-            const finalScoreEl = document.getElementById('final-grader-score');
-            const finalFeedbackEl = document.getElementById('final-grader-feedback');
-            const gradeAnswerBtn = document.getElementById('grade-answer-btn');
-
-            // Search Logic
-            let searchTimeout;
-            if (searchInput) {
-                searchInput.addEventListener('input', () => {
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(async () => {
-                        const query = searchInput.value.trim();
-                        if (query.length > 2) {
-                            resultsList.innerHTML = '<p class="text-indigo-300 text-sm animate-pulse">Searching local db...</p>';
-                            try {
-                                const results = await fullTextSearchQuestions(query);
-                                renderSearchResults(results, resultsList);
-                            } catch (error) {
-                                resultsList.innerHTML = `<p class="text-red-400 text-sm">Search Error</p>`;
-                            }
-                        } else {
-                            resultsList.innerHTML = '';
-                        }
-                    }, 300); 
-                });
-            }
-
-            function renderSearchResults(results, container) {
-                if (results.length === 0) {
-                    container.innerHTML = `<p class="text-gray-500 text-sm text-center">No matches found.</p>`;
-                    return;
-                }
-                const html = results.map(q => `
-                    <div class="p-4 mb-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition cursor-pointer">
-                        <div class="flex justify-between items-start">
-                            <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">${q.subject}</span>
-                            <span class="text-xs text-gray-500">${q.topic}</span>
-                        </div>
-                        <p class="text-sm text-gray-200 mt-1 line-clamp-2">${q.question_text || q.statements[0]?.text}</p>
-                    </div>
-                `).join('');
-                container.innerHTML = `<p class="text-xs text-gray-400 mb-2 uppercase tracking-wide">Found ${results.length} results</p>${html}`;
-            }
-
-            // Grader Logic
-            if (graderForm) {
-                graderForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const question = document.getElementById('grader-question').value.trim();
-                    const modelKey = document.getElementById('grader-model-key').value.trim();
-                    const userAnswer = document.getElementById('grader-user-answer').value.trim();
-                    
-                    if (!question || !modelKey || !userAnswer) {
-                        graderStatus.textContent = 'Please fill all fields.';
-                        return;
-                    }
-                    
-                    graderStatus.textContent = 'AI is analyzing your answer...';
-                    gradeAnswerBtn.disabled = true;
-                    graderResultsDisplay.classList.add('hidden'); 
-
-                    try {
-                        const result = await gradeMainsAnswer(question, userAnswer, modelKey, 10);
-                        finalScoreEl.textContent = `${result.score || 0}/10`;
-                        finalFeedbackEl.innerHTML = marked.parse(result.feedback || 'No feedback.'); 
-                        graderResultsDisplay.classList.remove('hidden');
-                        graderStatus.textContent = 'Analysis Complete';
-                    } catch (error) {
-                        graderStatus.textContent = 'Error: ' + error.message;
-                    } finally {
-                        gradeAnswerBtn.disabled = false;
-                    }
-                });
-            }
-        });
     </script>
 </body>
 </html>
