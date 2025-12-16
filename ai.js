@@ -1,10 +1,12 @@
-// ai.js - Client-Side AI Integration for UPSC Pro PWA (Complete AI Logic)
+// ai.js - Client-Side AI Integration for UPSC Pro PWA (Fixed)
 
-import { getSetting, setSetting, logError, APP_CONFIG } from './core.js'; 
+import { getSetting, setSetting } from './db.js'; // FIX: Import from DB layer
+import { logError, APP_CONFIG } from './core.js'; 
 
 // --- Configuration ---
-const GEMINI_MODEL_FLASH = 'gemini-2.5-flash';
-const GEMINI_MODEL_PRO = 'gemini-2.5-pro';
+// FIX: Switched to stable 1.5 models (2.5 is not yet public via standard API)
+const GEMINI_MODEL_FLASH = 'gemini-1.5-flash';
+const GEMINI_MODEL_PRO = 'gemini-1.5-pro';
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 
 let generativeModel = null;
@@ -13,13 +15,17 @@ let generativeModel = null;
 export async function initializeGenerativeModel() {
     const apiKey = await getSetting(GEMINI_API_KEY_DB_KEY);
     
-    if (!apiKey) return false;
+    if (!apiKey) {
+        console.log("[AI] No API Key found. AI features disabled.");
+        return false;
+    }
 
     try {
-        // Initialize the GenerativeModel instance (assuming global access)
+        // Initialize the GenerativeModel instance
+        // Note: 'google' global is loaded via the script tag in index.html
         generativeModel = new google.generativeai.GenerativeModel({
             apiKey: apiKey,
-            model: GEMINI_MODEL_FLASH, // Default to flash for general use
+            model: GEMINI_MODEL_FLASH, 
         });
         console.log("[AI] GenerativeModel initialized successfully.");
         return true;
@@ -41,15 +47,16 @@ export async function saveApiKey(key) {
  */
 export async function generateSocraticExplanation(question, userSelections, correctSelections) {
     if (!generativeModel) {
-        logError('AI_EXPLAINER_INIT_FAIL', new Error('Model not initialized'), { questionId: question.id });
-        return "Error: AI Model not initialized.";
+        // Try re-initializing in case it was missed
+        const success = await initializeGenerativeModel();
+        if (!success) return "Error: AI Model not initialized. Please set your API Key in Settings.";
     }
 
     const systemInstruction = "You are a highly knowledgeable UPSC expert and a patient Socratic tutor. Focus 70% of your response on addressing the specific error or logic gap implied by the user's incorrect choice. Use a step-by-step approach. Be precise and concise.";
     
     const userPrompt = `
         The user selected: [${userSelections.join(', ')}]. The correct options are: [${correctSelections.join(', ')}].
-        Question Statements: ${question.statements.map(s => `${s.id}: ${s.text}`).join('\n')}
+        Question Statements: ${question.statements ? question.statements.map(s => `${s.id}: ${s.text}`).join('\n') : question.question_text}
         Generate a detailed explanation. First, address why the user's selection is incorrect. Second, explain why the correct option(s) must be chosen. Use Markdown formatting.
     `;
     
@@ -58,11 +65,11 @@ export async function generateSocraticExplanation(question, userSelections, corr
             contents: [{ role: "user", parts: [{ text: userPrompt }] }],
             config: { systemInstruction: systemInstruction, temperature: 0.2 },
         });
-        return response.text;
+        return response.response.text();
 
     } catch (error) {
-        logError('AI_EXPLAINER_GENERATE_FAIL', error, { questionId: question.id, selections: userSelections });
-        return "Error generating explanation. Check your API key or network.";
+        logError('AI_EXPLAINER_GENERATE_FAIL', error, { questionId: question.id });
+        return "Error generating explanation. Check your API key or network connection.";
     }
 }
 
@@ -71,6 +78,7 @@ export async function generateSocraticExplanation(question, userSelections, corr
  * 3. Dynamic Remix Quiz Feature
  */
 export async function generateRemixQuiz(context, existingQuestions, count = 5) {
+    if (!generativeModel) await initializeGenerativeModel();
     if (!generativeModel) throw new Error("AI Model not initialized. Set your API key.");
 
     const systemInstruction = `
@@ -92,20 +100,23 @@ export async function generateRemixQuiz(context, existingQuestions, count = 5) {
             config: { systemInstruction: systemInstruction, temperature: 0.7 },
         });
 
-        const jsonText = response.text.trim();
+        // Clean the response (remove Markdown code blocks if AI adds them)
+        let jsonText = response.response.text().trim();
+        jsonText = jsonText.replace(/^```json/, '').replace(/```$/, '').trim();
+
         const newQuestions = JSON.parse(jsonText);
 
         if (Array.isArray(newQuestions) && newQuestions.length === count) {
             return newQuestions;
         } else {
-            const validationError = new Error(`AI returned ${newQuestions.length} items, expected ${count}.`);
-            logError('AI_REMIX_VALIDATION_FAIL', validationError, { context, rawOutput: jsonText.substring(0, 200) });
-            throw validationError;
+            // Fallback: If AI generated fewer questions, just return what it made
+            if (Array.isArray(newQuestions)) return newQuestions;
+            throw new Error(`AI returned invalid structure.`);
         }
 
     } catch (error) {
         logError('AI_REMIX_GENERATE_FAIL', error, { context });
-        throw new Error(`Failed to generate new quiz. Check API response structure. Details: ${error.message}`);
+        throw new Error(`Failed to generate new quiz. Details: ${error.message}`);
     }
 }
 
@@ -114,6 +125,7 @@ export async function generateRemixQuiz(context, existingQuestions, count = 5) {
  * 4. Diagram to Notes Feature (Multimodal Vision)
  */
 export async function generateNotesFromDiagram(base64Image, mimeType, promptText) {
+    if (!generativeModel) await initializeGenerativeModel();
     if (!generativeModel) throw new Error("AI Model not initialized.");
 
     const imagePart = { inlineData: { data: base64Image, mimeType: mimeType } };
@@ -124,11 +136,11 @@ export async function generateNotesFromDiagram(base64Image, mimeType, promptText
             contents: [{ role: "user", parts: [imagePart, { text: `Analyze the image and generate notes. User focus: "${promptText}".` }] }], 
             config: { systemInstruction: systemInstruction, model: GEMINI_MODEL_FLASH, temperature: 0.2 },
         });
-        return response.text;
+        return response.response.text();
 
     } catch (error) {
-        logError('AI_VISION_GENERATE_FAIL', error, { mimeType, promptLength: promptText.length });
-        throw new Error(`Failed to process image and generate notes. Details: ${error.message}`);
+        logError('AI_VISION_GENERATE_FAIL', error);
+        throw new Error(`Failed to process image. Details: ${error.message}`);
     }
 }
 
@@ -137,49 +149,47 @@ export async function generateNotesFromDiagram(base64Image, mimeType, promptText
  * 5. Mains Answer Grader Feature (Complex Reasoning)
  */
 export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, maxMarks = 10) {
+    if (!generativeModel) await initializeGenerativeModel();
     if (!generativeModel) throw new Error("AI Model not initialized.");
     
-    // --- CRITICAL: UPSC CALIBRATION ---
+    // Switch to PRO model for better reasoning if available, otherwise Flash is fine
+    const proModel = generativeModel.getGenerativeModel ? generativeModel.getGenerativeModel({ model: GEMINI_MODEL_PRO }) : generativeModel;
+
     const systemInstruction = `
         You are a highly experienced and strict UPSC examiner. Your grading MUST reflect the standard of the Civil Services Examination.
-        Key Grading Rules: 1. Strict Scaling: A score of 7 out of 10 must be reserved for an exceptionally brilliant, near-perfect answer. The average score for a good, well-structured answer is typically 4.5 to 5.5. 2. Objectivity: Grade ONLY based on content, structure, relevance. 3. Feedback: Must be constructive and detailed, written in Markdown.
+        Key Grading Rules: 
+        1. Strict Scaling: A score of 7 out of 10 is exceptionally brilliant. Average is 4.5-5.5.
+        2. Objectivity: Grade ONLY based on content, structure, relevance to the question.
+        3. Feedback: Must be constructive, detailed, and written in Markdown.
+        Return ONLY valid JSON: {"score": [NUMBER], "feedback": "[MARKDOWN STRING]"}
     `;
     
     const userPrompt = `
-        Question: ${question}, Max Marks: ${maxMarks}. MODEL ANSWER KEY: ${modelAnswerKey}. USER'S ANSWER: ${userAnswer}.
-        TASK: Assign a score (out of ${maxMarks}, remember 6.5-7 is near-perfect). Return ONLY the JSON: {"score": [NUMBER], "feedback": "[MARKDOWN STRING]"}
+        Question: ${question}, Max Marks: ${maxMarks}. 
+        MODEL ANSWER KEY: ${modelAnswerKey}. 
+        USER'S ANSWER: ${userAnswer}.
+        TASK: Assign a score and feedback. Return JSON.
     `;
     
     try {
-        const response = await generativeModel.generateContent({
+        const response = await proModel.generateContent({
             contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            config: { systemInstruction: systemInstruction, model: GEMINI_MODEL_PRO, temperature: 0.1 },
+            config: { systemInstruction: systemInstruction, temperature: 0.1 },
         });
 
-        const jsonText = response.text.trim();
+        let jsonText = response.response.text().trim();
+        jsonText = jsonText.replace(/^```json/, '').replace(/```$/, '').trim();
+
         const result = JSON.parse(jsonText);
-        
-        if (typeof result.score !== 'number' || typeof result.feedback !== 'string') {
-            throw new Error("AI returned invalid JSON structure.");
-        }
         return result;
 
     } catch (error) {
-        logError('AI_GRADER_FAIL', error, { questionLength: question.length, maxMarks });
-        throw new Error(`Grading failed. Ensure input is correct and check API/network.`);
+        logError('AI_GRADER_FAIL', error);
+        throw new Error(`Grading failed. Ensure input is correct and check API.`);
     }
 }
 
 
+// Auto-initialize on load
 document.addEventListener('DOMContentLoaded', initializeGenerativeModel);
-
-// Export all core functions
-export { 
-    initializeGenerativeModel, 
-    saveApiKey, 
-    generateSocraticExplanation, 
-    generateRemixQuiz, 
-    generateNotesFromDiagram, 
-    gradeMainsAnswer 
-};
 
