@@ -1,4 +1,4 @@
-// page-selection.js - Full Functionality with Robust Event Handling
+// page-selection.js - Full Functionality (Settings, Remix, Static, & Current Affairs)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
@@ -39,7 +39,7 @@ document.addEventListener('click', async (e) => {
         settingsStatus.className = "text-xs mb-3 text-blue-400";
 
         try {
-            // Lazy Load AI to prevent startup crashes
+            // Lazy Load AI
             const aiModule = await import('./ai.js');
             
             settingsBtn.textContent = "Verifying...";
@@ -106,6 +106,59 @@ document.addEventListener('click', async (e) => {
     if (staticBtn) {
         hideModal();
         startNewQuiz(staticBtn.dataset.subject, staticBtn.dataset.topic);
+        return;
+    }
+
+    // --- D. DAILY CURRENT AFFAIRS GENERATOR (NEW) ---
+    const caBtn = e.target.closest('#generate-ca-btn');
+    if (caBtn) {
+        if (caBtn.disabled) return;
+
+        // 1. UI Feedback
+        caBtn.disabled = true;
+        const originalText = caBtn.innerHTML;
+        caBtn.innerHTML = `<span class="animate-spin">⚙️</span> Analyzing News...`;
+
+        try {
+            // 2. Load Dependencies
+            const aiModule = await import('./ai.js');
+            
+            // 3. Get Schema
+            const existingQuestions = await fetchInitialQuestions();
+            const schema = existingQuestions[0]; 
+
+            // 4. Call AI
+            caBtn.innerHTML = `<span class="animate-spin">🧠</span> Drafting Questions...`;
+            const newQuestions = await aiModule.generateCurrentAffairsQuiz(schema);
+
+            // 5. Tag them for the system
+            const dateTopic = new Date().toLocaleDateString('en-GB'); // "17/12/2025"
+            const taggedQuestions = newQuestions.map(q => ({
+                ...q,
+                subject: "Current Affairs", 
+                topic: dateTopic 
+            }));
+
+            // 6. Save to DB
+            await addQuestions(taggedQuestions);
+
+            // 7. Success Popup & Auto-Start
+            const userWantsToPlay = confirm(
+                `Success! Generated 5 CA Questions for ${dateTopic}.\n\nDo you want to attempt them right now?`
+            );
+
+            if (userWantsToPlay) {
+                startNewQuiz("Current Affairs", dateTopic);
+            }
+
+        } catch (error) {
+            console.error(error);
+            alert(`Generation Failed: ${error.message}`);
+        } finally {
+            caBtn.disabled = false;
+            caBtn.innerHTML = originalText;
+        }
+        return;
     }
 });
 
