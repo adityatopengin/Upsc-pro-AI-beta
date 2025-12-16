@@ -5,11 +5,14 @@ import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generat
 import { getSetting, setSetting } from './db.js'; 
 import { logError, APP_CONFIG } from './core.js'; 
 
+// UPDATED PRIORITY LIST (Dec 2025 Compatible)
 const MODEL_PRIORITY_LIST = [
-    'gemini-1.5-flash', // Fastest & most likely to work on Free Tier
-    'gemini-1.5-pro',
-    'gemini-1.0-pro'
+    'gemini-2.5-flash',       // Newest, fastest, most reliable
+    'gemini-2.0-flash',       // Stable fallback
+    'gemini-1.5-pro-002',     // Valid legacy Pro model
+    'gemini-1.5-flash-002'    // Valid legacy Flash model
 ];
+
 
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 
