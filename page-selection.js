@@ -111,12 +111,14 @@ if (saveSettingsBtn) {
             } else {
                 throw new Error("Key saved, but AI failed to respond.");
             }
-        } catch (error) {
-             logError('SETTINGS_SAVE_FAIL', error);
-             settingsStatus.textContent = "Invalid Key or Network Error.";
-             settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-red-500 font-bold";
-             saveSettingsBtn.disabled = false;
-        }
+         } catch (error) {
+     logError('SETTINGS_SAVE_FAIL', error);
+     // NEW LINE: Show the exact error message on the screen
+     settingsStatus.textContent = `Error: ${error.message}`; 
+     settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-red-500 font-bold";
+     saveSettingsBtn.disabled = false;
+}
+
     });
 }
 
