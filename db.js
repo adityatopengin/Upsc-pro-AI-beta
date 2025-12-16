@@ -1,5 +1,5 @@
-// db.js - Complete Database & Search Logic
-import { logError, fetchInitialQuestions, APP_CONFIG } from './core.js'; 
+// db.js - Complete Database & Search Logic (Fixed Exports)
+import { fetchInitialQuestions, APP_CONFIG } from './core.js'; 
 
 // --- Global Dexie Instance ---
 export const db = new Dexie('UPSCProDB');
@@ -12,11 +12,17 @@ db.version(1).stores({
     questions: 'id, subject, topic, *keywords', 
     quizResults: '++id, timestamp, subject', 
     settings: 'key', 
-    notes: '++id, timestamp, source', 
+    notes: '++id, title, timestamp' // Added schema for notes
 });
 
-// --- 1. Search Indexing Logic (Was Missing) ---
+// --- 1. Search Indexing Logic ---
 function setupFlexSearchIndex() {
+    // Check if FlexSearch is loaded
+    if (typeof FlexSearch === 'undefined') {
+        console.warn("FlexSearch library not loaded. Search disabled.");
+        return;
+    }
+    
     questionSearchIndex = new FlexSearch.Document({
         document: {
             id: "id",
@@ -29,6 +35,7 @@ function setupFlexSearchIndex() {
 
 export async function populateSearchIndex() {
     if (!questionSearchIndex) setupFlexSearchIndex();
+    if (!questionSearchIndex) return;
 
     try {
         const allQuestions = await db.questions.toArray(); 
@@ -42,45 +49,62 @@ export async function populateSearchIndex() {
         });
         console.log(`[DB] Indexed ${allQuestions.length} questions for search.`);
     } catch (error) {
-        logError('SEARCH_INDEX_POPULATE_FAIL', error);
+        console.error('SEARCH_INDEX_POPULATE_FAIL', error);
     }
 }
 
 export async function fullTextSearchQuestions(query) {
     if (!questionSearchIndex) await populateSearchIndex();
+    if (!questionSearchIndex) return [];
     
-    // Search and flatten results
-    const results = questionSearchIndex.search(query, { limit: 10, enrich: true });
-    let flatResults = [];
-    if (results.length > 0) {
-        const uniqueDocs = new Map();
-        results.forEach(fieldGroup => {
-            fieldGroup.result.forEach(doc => uniqueDocs.set(doc.id, doc.doc));
-        });
-        flatResults = Array.from(uniqueDocs.values());
+    try {
+        const results = questionSearchIndex.search(query, { limit: 10, enrich: true });
+        let flatResults = [];
+        if (results.length > 0) {
+            const uniqueDocs = new Map();
+            results.forEach(fieldGroup => {
+                fieldGroup.result.forEach(doc => uniqueDocs.set(doc.id, doc.doc));
+            });
+            flatResults = Array.from(uniqueDocs.values());
+        }
+        return flatResults;
+    } catch (e) {
+        return [];
     }
-    return flatResults;
 }
 
-// --- 2. Data Access Functions (Were Missing) ---
+// --- 2. Data Access Functions ---
 
-export async function addQuestions(questions) {
-    // Determine the next ID if not provided (simple logic)
-    // Ideally, your JSON should have unique IDs. 
-    return await db.questions.bulkPut(questions);
-}
-
-export async function getQuestionsForQuiz(subject, topic) {
+// FIX 1: Renamed from 'getQuestionsForQuiz' to match page-quiz.js
+export async function getQuestions(subject, topic) {
     let collection = db.questions.where({ subject: subject });
     if (topic) collection = collection.filter(q => q.topic === topic);
     return await collection.toArray();
+}
+
+export async function addQuestions(questions) {
+    return await db.questions.bulkPut(questions);
 }
 
 export async function saveQuizResult(result) {
     return await db.quizResults.add(result);
 }
 
-// --- 3. Settings Logic (CRITICAL: ai.js needs this) ---
+// FIX 2: Added missing Note functions (needed for page-notes.js)
+export async function saveNote(note) {
+    note.timestamp = Date.now();
+    return await db.notes.put(note);
+}
+
+export async function getNotes() {
+    return await db.notes.orderBy('timestamp').reverse().toArray();
+}
+
+export async function deleteNote(id) {
+    return await db.notes.delete(id);
+}
+
+// --- 3. Settings Logic ---
 
 export async function getSetting(key) {
     try {
@@ -100,19 +124,19 @@ async function initializeDatabase() {
         const count = await db.questions.count();
         if (count === 0) {
             console.log("[DB] Database empty. Bootstrapping initial data...");
-            const questions = await fetchInitialQuestions(); // Fetches from core.js logic
+            const questions = await fetchInitialQuestions(); 
             if (questions && questions.length > 0) {
                 await db.questions.bulkPut(questions);
                 console.log(`[DB] Bootstrapped ${questions.length} questions.`);
             }
         }
     } catch (error) {
-        logError('DB_BOOTSTRAP_FAIL', error);
+        console.error('DB_BOOTSTRAP_FAIL', error);
     }
 }
 
 // Open DB
-db.open().catch(error => logError('DB_INIT_CRITICAL', error));
+db.open().catch(error => console.error('DB_INIT_CRITICAL', error));
 
 // Main Startup Sequence
 document.addEventListener('DOMContentLoaded', async () => {
@@ -126,7 +150,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const overlay = document.getElementById('initial-loading-overlay');
     if (overlay) {
         overlay.classList.add('opacity-0');
-        setTimeout(() => { overlay.style.pointerEvents = 'none'; }, 500); 
+        setTimeout(() => { 
+            overlay.style.pointerEvents = 'none'; 
+            // overlay.classList.add('hidden'); // Optional: fully hide
+        }, 500); 
     }
 });
 
