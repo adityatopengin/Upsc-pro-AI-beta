@@ -1,202 +1,171 @@
-// page-quiz.js - Logic for running a quiz, handling user interaction, and saving results.
+// page-quiz.js - Quiz Engine & Interaction Logic
 
-import { getQuestionsForQuiz, saveQuizResult } from './db.js';
-import { calculateScore, aggregateQuizResults, logError, getSafeThemeClasses } from './core.js';
-import { showModal } from './ui-common.js'; // Assuming displayResults uses showModal
+import { getQuestions } from './db.js';
+import { calculateScore, aggregateQuizResults } from './core.js';
+import { showModal, goHome } from './ui-common.js';
+import { generateSocraticExplanation } from './ai.js'; 
 
-// --- Global State ---
-let currentQuizQuestions = [];
+let currentQuestions = [];
 let currentQuestionIndex = 0;
-let quizRunResults = []; 
-let userSelections = new Map(); // Tracks user's selections { questionId: ['a', 'c'] }
+let userAnswers = {}; // Map: { questionId: [selectedOptionIds] }
+let quizContext = {};
 
-// --- DOM Elements (Must match index.html IDs) ---
-const quizContainer = document.getElementById('quiz-container');
-const questionDisplay = document.getElementById('question-display');
-const optionsContainer = document.getElementById('options-container');
-const nextButton = document.getElementById('next-button');
-const resultsModalContent = document.getElementById('results-content'); // Unified Modal Content ID
-
-/**
- * 1. Quiz Initialization and Fetching
- */
+// --- 1. Start Quiz ---
 export async function startNewQuiz(subject, topic) {
-    try {
-        currentQuizQuestions = await getQuestionsForQuiz(subject, topic);
-    } catch (error) {
-        logError('QUIZ_START_FETCH_FAIL', error, { subject, topic });
-        alert("Failed to load quiz questions due to a database error.");
-        return;
-    }
+    // UI Setup
+    document.getElementById('home-screen').classList.add('hidden');
+    document.getElementById('quiz-container').classList.remove('hidden');
     
-    if (currentQuizQuestions.length === 0) {
-        logError('QUIZ_START_NO_QUESTIONS', new Error('Zero questions returned for quiz'), { subject, topic });
-        alert(`No questions found for ${topic} in ${subject}.`);
-        return;
-    }
-
-    // Reset state and UI
+    // Reset State
     currentQuestionIndex = 0;
-    quizRunResults = [];
-    userSelections.clear();
-    quizContainer.classList.remove('hidden');
-
-    renderQuestion(currentQuizQuestions[currentQuestionIndex]);
-}
-
-
-/**
- * 2. Question Rendering (Handles Statement-Based Format and UI/UX)
- */
-function renderQuestion(question) {
-    if (!question) return;
-
-    questionDisplay.innerHTML = '';
-    optionsContainer.innerHTML = '';
+    userAnswers = {};
+    quizContext = { subject, topic };
     
-    const currentSelections = userSelections.get(question.id) || [];
-
-    // --- Render Statements (New Schema Feature) ---
-    if (question.statements && question.statements.length > 0) {
-        questionDisplay.innerHTML += `
-            <div class="p-3 mb-4 ${getSafeThemeClasses('bg-rainbow-100')} ${getSafeThemeClasses('border-soft')} shadow-inner">
-                <h3 class="font-semibold text-md mb-2">Statements:</h3>
-                <ol class="list-decimal list-inside ml-4 space-y-2">
-                    ${question.statements.map(stmt => `<li data-stmt-id="${stmt.id}">${stmt.text}</li>`).join('')}
-                </ol>
-            </div>
-        `;
-    }
-
-    // --- Render Question Text and Options ---
-    questionDisplay.innerHTML += `<p class="text-lg font-bold mb-4">${question.question_text || 'Select the correct combination:'}</p>`;
-    
-    question.options.forEach(option => {
-        const inputType = question.type === 'single-choice' ? 'radio' : 'checkbox';
-        const isSelected = currentSelections.includes(option.id);
-        
-        const selectionClass = isSelected ? getSafeThemeClasses('bg-rainbow-400') + ' shadow-md' : '';
-
-        const optionEl = document.createElement('div');
-        optionEl.className = `option-item p-3 mb-2 border cursor-pointer transition duration-150 
-                              ${getSafeThemeClasses('border-soft')} 
-                              border-gray-200 dark:border-gray-700 
-                              hover:bg-primary/10 ${selectionClass}`;
-
-        optionEl.innerHTML = `
-            <input type="${inputType}" id="opt-${option.id}" name="quiz-option" value="${option.id}" class="mr-3 hidden">
-            <label for="opt-${option.id}" class="block text-sm font-medium">(${option.id.toUpperCase()}) ${option.text}</label>
-        `;
-        
-        optionEl.addEventListener('click', () => handleOptionSelection(question.id, option.id, inputType));
-        optionsContainer.appendChild(optionEl);
-    });
-    
-    nextButton.disabled = currentSelections.length === 0;
-}
-
-
-/**
- * 3. User Selection Handler (Includes UI/UX Selection Feedback)
- */
-function handleOptionSelection(questionId, selectedId, inputType) {
-    let currentSelections = userSelections.get(questionId) || [];
-    const index = currentSelections.indexOf(selectedId);
-
-    if (inputType === 'radio') {
-        currentSelections = [selectedId];
-    } else { 
-        if (index > -1) {
-            currentSelections.splice(index, 1);
-        } else {
-            currentSelections.push(selectedId);
-        }
-    }
-    userSelections.set(questionId, currentSelections);
-
-    // Visual Update Logic (Phase 5 UI/UX)
-    const options = optionsContainer.querySelectorAll('.option-item');
-    options.forEach(opt => {
-        const input = opt.querySelector('input');
-        const isSelected = currentSelections.includes(input.value);
-
-        opt.classList.remove(getSafeThemeClasses('bg-rainbow-400'), 'shadow-md');
-        if (isSelected) {
-            opt.classList.add(getSafeThemeClasses('bg-rainbow-400'), 'shadow-md');
-        }
-    });
-
-    nextButton.disabled = currentSelections.length === 0;
-}
-
-
-/**
- * 4. Navigation and Grading
- */
-if (nextButton) {
-    nextButton.addEventListener('click', () => {
-        const question = currentQuizQuestions[currentQuestionIndex];
-        const selections = userSelections.get(question.id) || [];
-
-        // Grade the current question
-        const { score, isCorrect, mistakes } = calculateScore(question, selections);
-
-        // Prepare result object (Fixes the Critical userSel Bug)
-        const questionResult = {
-            questionId: question.id,
-            subject: question.subject, 
-            userSelections: selections, // CRITICAL FIX: The user's choice is saved
-            isCorrect: isCorrect,
-            score: score,
-            detailedMistakes: mistakes, 
-        };
-
-        quizRunResults.push(questionResult);
-
-        // Move to next question or end quiz
-        currentQuestionIndex++;
-
-        if (currentQuestionIndex < currentQuizQuestions.length) {
-            renderQuestion(currentQuizQuestions[currentQuestionIndex]);
-        } else {
-            endQuiz();
-        }
-    });
-}
-
-
-/**
- * 5. Quiz Finalization and Saving
- */
-async function endQuiz() {
-    const finalResult = aggregateQuizResults(quizRunResults);
+    // Show Loading
+    const qDisplay = document.getElementById('question-display');
+    qDisplay.innerHTML = `<p class="text-center animate-pulse">Loading ${subject} questions...</p>`;
 
     try {
-        const resultId = await saveQuizResult(finalResult);
-        displayResults(finalResult, resultId); 
+        // Fetch from DB
+        currentQuestions = await getQuestions(subject, topic);
+        
+        if (!currentQuestions || currentQuestions.length === 0) {
+            alert("No questions found for this topic. Try generating some with AI first!");
+            goHome();
+            return;
+        }
+
+        renderQuestion();
+        updateNavigationButtons();
+
     } catch (error) {
-        logError('QUIZ_SAVE_RESULT_FAIL', error, { totalScore: finalResult.score, attempts: finalResult.totalQuestions });
-        alert("Quiz completed, but the result could not be saved locally.");
-        displayResults(finalResult, null);
-    } finally {
-        quizContainer.classList.add('hidden');
+        console.error("Quiz Load Error:", error);
+        alert("Failed to load quiz.");
+        goHome();
     }
 }
 
-/**
- * 6. Results Display (Placeholder - uses the Unified Modal)
- */
-function displayResults(results, id) {
-    if (resultsModalContent) {
-        resultsModalContent.innerHTML = `
-            <h3 class="text-2xl font-bold mb-4 ${getSafeThemeClasses('text-primary')}">Quiz Completed!</h3>
-            <p class="text-4xl font-extrabold mb-6">${results.score} / ${results.totalQuestions}</p>
-            <p class="text-sm dark:text-gray-300 mb-4">You got ${results.mistakes.length} questions wrong. Review the dashboard for detailed analytics.</p>
-            <button onclick="hideModal()" class="w-full py-2 bg-primary text-white ${getSafeThemeClasses('border-soft')} hover:bg-indigo-700 transition">Review Dashboard</button>
+
+// --- 2. Render Question (With "Quit" Button) ---
+function renderQuestion() {
+    const question = currentQuestions[currentQuestionIndex];
+    const qDisplay = document.getElementById('question-display');
+    const optionsContainer = document.getElementById('options-container');
+
+    // 1. Render Question Text & Header
+    qDisplay.innerHTML = `
+        <div class="flex justify-between items-center mb-4 border-b pb-2">
+            <span class="text-sm font-bold text-gray-500">Q ${currentQuestionIndex + 1} of ${currentQuestions.length}</span>
+            <button onclick="goHome()" class="text-xs text-red-500 font-semibold hover:underline">Quit X</button>
+        </div>
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
+            ${question.question_text || "Consider the following statements:"}
+        </h2>
+        ${renderStatements(question)}
+    `;
+
+    // 2. Render Options
+    optionsContainer.innerHTML = '';
+    question.options.forEach(opt => {
+        const isSelected = (userAnswers[question.id] || []).includes(opt.id);
+        
+        const btn = document.createElement('div');
+        btn.className = `
+            p-3 mb-2 rounded-lg border cursor-pointer transition select-none flex items-center
+            ${isSelected ? 'bg-indigo-100 border-primary dark:bg-indigo-900' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50'}
         `;
-        showModal('results-content');
-    } else {
-        logError('RESULTS_UI_FAIL', new Error('Results modal content element missing.'));
+        btn.innerHTML = `
+            <div class="w-5 h-5 rounded-full border mr-3 flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-gray-400'}">
+                ${isSelected ? '<div class="w-2 h-2 bg-white rounded-full"></div>' : ''}
+            </div>
+            <span class="${isSelected ? 'font-semibold text-primary dark:text-indigo-300' : ''}">${opt.text}</span>
+        `;
+        
+        btn.onclick = () => toggleSelection(question.id, opt.id);
+        optionsContainer.appendChild(btn);
+    });
+}
+
+function renderStatements(question) {
+    if (!question.statements || question.statements.length === 0) return '';
+    return `
+        <ul class="list-decimal list-inside space-y-1 mb-4 text-gray-700 dark:text-gray-300">
+            ${question.statements.map(s => `<li>${s.text}</li>`).join('')}
+        </ul>
+    `;
+}
+
+
+// --- 3. Interaction Logic ---
+function toggleSelection(questionId, optionId) {
+    // Toggle logic (allows multiple selection if needed, but usually single for UPSC prelims)
+    // For strictly single choice:
+    userAnswers[questionId] = [optionId]; 
+    renderQuestion(); // Re-render to show active state
+}
+
+function updateNavigationButtons() {
+    const nextBtn = document.getElementById('next-button');
+    const isLast = currentQuestionIndex === currentQuestions.length - 1;
+    
+    nextBtn.textContent = isLast ? "Finish & Submit" : "Next Question";
+    nextBtn.onclick = isLast ? submitQuiz : nextQuestion;
+    nextBtn.disabled = false;
+}
+
+function nextQuestion() {
+    if (currentQuestionIndex < currentQuestions.length - 1) {
+        currentQuestionIndex++;
+        renderQuestion();
+        updateNavigationButtons();
     }
 }
+
+
+// --- 4. Submission & Results (Fixes the "Broken Demo") ---
+async function submitQuiz() {
+    const results = currentQuestions.map(q => {
+        const userSel = userAnswers[q.id] || [];
+        const { score, isCorrect, mistakes } = calculateScore(q, userSel);
+        return {
+            questionId: q.id,
+            questionText: q.question_text,
+            userSelections: userSel,
+            isCorrect,
+            score,
+            mistakes,
+            correctOptions: q.options.filter(o => o.is_correct).map(o => o.id)
+        };
+    });
+
+    const summary = aggregateQuizResults(results);
+    showResultsModal(summary, results);
+}
+
+function showResultsModal(summary, detailedResults) {
+    const resultsContent = document.getElementById('results-content');
+    
+    // Calculate percentage
+    const percentage = Math.round((summary.score / summary.totalQuestions) * 100);
+    let message = percentage > 80 ? "Excellent!" : (percentage > 50 ? "Good Effort" : "Keep Practicing");
+
+    resultsContent.innerHTML = `
+        <div class="text-center">
+            <h3 class="text-2xl font-bold ${percentage > 50 ? 'text-green-600' : 'text-orange-500'}">${message}</h3>
+            <p class="text-4xl font-extrabold my-4">${summary.score} / ${summary.totalQuestions}</p>
+            <p class="text-gray-500 mb-6">Accuracy: ${percentage}%</p>
+            
+            <div class="space-y-2">
+                <button onclick="goHome()" class="w-full py-3 bg-primary text-white rounded-lg font-bold shadow-lg hover:bg-indigo-700">
+                    Back to Dashboard
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('results-content');
+}
+
+// Export for global usage
+window.startNewQuiz = startNewQuiz;
 
