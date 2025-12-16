@@ -1,15 +1,16 @@
-// page-selection.js - Logic for Quiz Selection, Settings, and AI Remix
-// (Fixed: Waits for DOM to ensure buttons work)
+// page-selection.js - Logic for Quiz Selection & Settings
+// (Robust "Lazy Load" Version - Fixes the Dead Button)
 
 import { startNewQuiz } from './page-quiz.js';
-import { fetchInitialQuestions, logError, APP_CONFIG } from './core.js';
-import { initializeGenerativeModel, generateRemixQuiz, saveApiKey } from './ai.js';
+import { fetchInitialQuestions, APP_CONFIG } from './core.js';
 import { getSetting, addQuestions } from './db.js'; 
 import { hideModal } from './ui-common.js'; 
 
-// Wait for the HTML to be fully ready
+// Note: We do NOT import ai.js here anymore. We load it dynamically.
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Page Selection Logic Loaded");
+    // Debug: If you see this in console, the file is alive!
+    console.log("Page Selection Logic: Alive and Ready");
 
     // --- DOM Elements ---
     const selectionContent = document.getElementById('quiz-selection-content');
@@ -21,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsStatus = document.getElementById('settings-status');
 
     // --- 1. Load Existing Key ---
-    // Pre-fill the input if a key is already saved
     getSetting(APP_CONFIG.GEMINI_API_KEY_NAME).then(existingKey => {
         if (apiKeyInput && existingKey) {
             apiKeyInput.value = existingKey;
@@ -31,9 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 2. Quiz Selection (Static) ---
     if (selectionContent) {
         selectionContent.addEventListener('click', (e) => {
-            if (e.target.dataset.action === 'start-static-quiz') {
-                const subject = e.target.dataset.subject;
-                const topic = e.target.dataset.topic;
+            // Event Delegation: Check if clicked element is our button
+            const btn = e.target.closest('button');
+            if (!btn) return;
+
+            if (btn.dataset.action === 'start-static-quiz') {
+                const subject = btn.dataset.subject;
+                const topic = btn.dataset.topic;
                 
                 if (subject && topic) {
                     hideModal();
@@ -43,39 +47,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 3. AI Remix Quiz (Generator) ---
+    // --- 3. AI Remix Quiz (Lazy Load AI) ---
     if (remixQuizBtn) {
         remixQuizBtn.addEventListener('click', async () => {
             const topic = remixTopicInput.value.trim();
             const count = parseInt(remixCountInput.value);
 
-            if (!topic) { 
-                alert("Please enter a topic."); 
-                return; 
-            }
+            if (!topic) { alert("Please enter a topic."); return; }
 
-            // UI Feedback
             remixQuizBtn.disabled = true;
-            remixQuizBtn.textContent = "Connecting to AI...";
+            remixQuizBtn.textContent = "Loading AI Module...";
             
             try {
-                // Get schema example
+                // DYNAMIC IMPORT: Load AI only when needed
+                const aiModule = await import('./ai.js');
+                
+                remixQuizBtn.textContent = "Generating...";
                 const existingQuestions = await fetchInitialQuestions();
                 const exampleSchema = existingQuestions.slice(0, 1); 
 
-                // Generate
-                const newQuestions = await generateRemixQuiz({ subject: "Remixed", topic: topic }, exampleSchema, count);
+                const newQuestions = await aiModule.generateRemixQuiz(
+                    { subject: "Remixed", topic: topic }, 
+                    exampleSchema, 
+                    count
+                );
                 
-                // Save & Start
                 await addQuestions(newQuestions); 
-                
-                alert(`Success! Generated ${newQuestions.length} questions on ${topic}.`);
                 hideModal();
                 startNewQuiz("Remixed", topic);
 
             } catch (error) {
                 console.error(error);
-                alert(`AI Error: ${error.message}`);
+                alert(`AI Failed: ${error.message}. Check Internet.`);
             } finally {
                 remixQuizBtn.disabled = false;
                 remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
@@ -83,13 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- 4. Settings (Save Key) ---
+    // --- 4. Settings (Lazy Load AI) ---
     if (saveSettingsBtn) {
-        console.log("Settings Button Found & Attached"); // Debug check
-
         saveSettingsBtn.addEventListener('click', async () => {
-            console.log("Settings Button Clicked"); // Debug check
-            
             const apiKey = apiKeyInput.value.trim();
             
             if (!apiKey) {
@@ -97,45 +96,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Immediate Visual Feedback
+            // Visual Feedback
             saveSettingsBtn.disabled = true;
-            saveSettingsBtn.textContent = "Verifying...";
-            settingsStatus.textContent = "Testing connection...";
-            settingsStatus.className = "text-sm mb-3 text-blue-600";
+            saveSettingsBtn.textContent = "Loading AI Brain...";
+            settingsStatus.textContent = "Initializing System...";
+            settingsStatus.className = "text-xs mb-3 text-blue-400";
 
             try {
-                // 1. Save Key
-                const result = await saveApiKey(apiKey); 
+                // DYNAMIC IMPORT: This is the magic fix.
+                // It tries to load ai.js NOW. If it fails, we catch the error here.
+                const aiModule = await import('./ai.js');
+                
+                saveSettingsBtn.textContent = "Verifying Key...";
+                const result = await aiModule.saveApiKey(apiKey); 
 
-                // 2. Handle Result
                 if (result.success) {
-                    settingsStatus.textContent = `Connected! Using model: ${result.model}`;
-                    settingsStatus.className = "text-sm mb-3 text-green-600 font-bold";
+                    settingsStatus.textContent = `Connected! Model: ${result.model}`;
+                    settingsStatus.className = "text-xs mb-3 text-green-400 font-bold";
                     
-                    // Auto-close after 1.5s
                     setTimeout(() => {
                         hideModal();
                         saveSettingsBtn.disabled = false;
-                        saveSettingsBtn.textContent = "Save & Verify Key";
+                        saveSettingsBtn.textContent = "Connect AI";
                         settingsStatus.textContent = ""; 
                     }, 1500);
                 } else {
-                    // Show Error
-                    console.error(result.error);
                     settingsStatus.textContent = `Failed: ${result.error}`;
-                    settingsStatus.className = "text-sm mb-3 text-red-600 font-bold break-words";
+                    settingsStatus.className = "text-xs mb-3 text-red-400 font-bold break-words";
                     saveSettingsBtn.disabled = false;
-                    saveSettingsBtn.textContent = "Save & Verify Key";
+                    saveSettingsBtn.textContent = "Retry Connection";
                 }
             } catch (error) {
-                 settingsStatus.textContent = `Critical Error: ${error.message}`;
-                 settingsStatus.className = "text-sm mb-3 text-red-600 font-bold";
+                 // This catches if the file ./ai.js fails to load entirely (Network error)
+                 settingsStatus.textContent = `System Error: Could not load AI module.`;
+                 console.error("Import failed:", error);
+                 alert("Error: Your internet might be blocking the Google AI library.\n" + error.message);
+                 
                  saveSettingsBtn.disabled = false;
-                 saveSettingsBtn.textContent = "Save & Verify Key";
+                 saveSettingsBtn.textContent = "Connect AI";
             }
         });
-    } else {
-        console.error("Critical: Save Settings Button NOT found in HTML");
     }
 });
 
