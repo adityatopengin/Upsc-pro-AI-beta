@@ -1,10 +1,10 @@
-// page-selection.js - Logic for Quiz Selection, Settings Management, and AI Remix Quiz Generation
+// page-selection.js - Logic for Quiz Selection (Debug Version)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, logError, APP_CONFIG } from './core.js';
 import { initializeGenerativeModel, generateRemixQuiz, saveApiKey } from './ai.js';
 import { getSetting, addQuestions } from './db.js'; 
-import { hideModal } from './ui-common.js'; // Ensure hideModal is imported
+import { hideModal } from './ui-common.js'; 
 
 // --- DOM Elements ---
 const selectionContent = document.getElementById('quiz-selection-content');
@@ -26,51 +26,38 @@ function handleQuizStart(subject, topic) {
     startNewQuiz(subject, topic);
 }
 
-// Handler for static buttons/dropdowns in the modal
 if (selectionContent) {
     selectionContent.addEventListener('click', (e) => {
         if (e.target.dataset.action === 'start-static-quiz') {
-            const subject = e.target.dataset.subject || 'History';
-            const topic = e.target.dataset.topic || 'IVC';
-            handleQuizStart(subject, topic);
+            handleQuizStart(e.target.dataset.subject, e.target.dataset.topic);
         }
     });
 }
 
-
-// --- 2. AI Remix Quiz Generation (Advanced Feature) ---
+// --- 2. AI Remix Quiz ---
 if (remixQuizBtn) {
     remixQuizBtn.addEventListener('click', async () => {
         const topic = remixTopicInput.value.trim();
         const count = parseInt(remixCountInput.value);
 
-        if (!topic || count < 1 || count > 20) {
-            alert("Please provide a valid topic and question count (1-20).");
-            return;
-        }
+        if (!topic) { alert("Enter a topic."); return; }
 
         remixQuizBtn.disabled = true;
-        remixQuizBtn.textContent = `Generating ${count} questions... (API Call)`;
+        remixQuizBtn.textContent = "Connecting to AI...";
         
         try {
-            // 1. Fetch existing question schema (for AI to copy the format)
             const existingQuestions = await fetchInitialQuestions();
-            const exampleSchema = existingQuestions.slice(0, 1); // Get 1 example for schema
+            const exampleSchema = existingQuestions.slice(0, 1); 
 
-            // 2. Call the AI API
             const newQuestions = await generateRemixQuiz({ subject: "Remixed", topic: topic }, exampleSchema, count);
             
-            // 3. Add to the database
             await addQuestions(newQuestions); 
             
-            alert(`Successfully generated and added ${newQuestions.length} new questions on: ${topic}!`);
-            
-            // 4. Optionally, start the quiz immediately
+            alert(`Generated ${newQuestions.length} questions on ${topic}!`);
             handleQuizStart("Remixed", topic);
 
         } catch (error) {
-            logError('AI_REMIX_UI_FAIL', error, { topic, count });
-            alert(`Failed to generate questions: ${error.message}`);
+            alert(`AI Error: ${error.message}`);
         } finally {
             remixQuizBtn.disabled = false;
             remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
@@ -79,7 +66,7 @@ if (remixQuizBtn) {
 }
 
 
-// --- 3. Settings Management (UPDATED Logic) ---
+// --- 3. Settings Management (DEBUG MODE) ---
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
         const apiKey = apiKeyInput.value.trim();
@@ -90,39 +77,38 @@ if (saveSettingsBtn) {
         }
 
         saveSettingsBtn.disabled = true;
-        settingsStatus.textContent = "Verifying key...";
-        settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-blue-600";
+        settingsStatus.textContent = "Testing connection...";
+        settingsStatus.className = "text-sm mb-3 text-blue-600";
 
         try {
-            // Save and Try to Init
-            await saveApiKey(apiKey); 
-            const isInitialized = await initializeGenerativeModel();
+            // Save Key
+            const result = await saveApiKey(apiKey); 
 
-            if (isInitialized) {
-                settingsStatus.textContent = "Success! AI Active. Closing...";
-                settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-green-600 font-bold";
+            // Result is now an OBJECT: { success: true/false, error: "..." }
+            if (result.success) {
+                settingsStatus.textContent = `Success! Connected to ${result.model}`;
+                settingsStatus.className = "text-sm mb-3 text-green-600 font-bold";
                 
-                // UX FIX: Auto-close after 1.5 seconds so user isn't stuck
                 setTimeout(() => {
                     hideModal();
                     saveSettingsBtn.disabled = false;
-                    settingsStatus.textContent = ""; // Clear status for next time
+                    settingsStatus.textContent = ""; 
                 }, 1500);
             } else {
-                throw new Error("Key saved, but AI failed to respond.");
+                // SHOW THE REAL ERROR
+                console.error(result.error);
+                settingsStatus.textContent = `Failed: ${result.error}`;
+                settingsStatus.className = "text-sm mb-3 text-red-600 font-bold break-words";
+                saveSettingsBtn.disabled = false;
             }
-         } catch (error) {
-     logError('SETTINGS_SAVE_FAIL', error);
-     // NEW LINE: Show the exact error message on the screen
-     settingsStatus.textContent = `Error: ${error.message}`; 
-     settingsStatus.className = "text-sm h-auto min-h-[1.5rem] mb-3 text-red-500 font-bold";
-     saveSettingsBtn.disabled = false;
-}
-
+        } catch (error) {
+             settingsStatus.textContent = `Critical Error: ${error.message}`;
+             settingsStatus.className = "text-sm mb-3 text-red-600 font-bold";
+             saveSettingsBtn.disabled = false;
+        }
     });
 }
 
-// Load existing key when settings modal is opened
 document.addEventListener('DOMContentLoaded', async () => {
     const existingKey = await getSetting(APP_CONFIG.GEMINI_API_KEY_NAME);
     if (apiKeyInput && existingKey) {
