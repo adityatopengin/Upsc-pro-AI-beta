@@ -10,16 +10,15 @@
     <meta name="theme-color" content="#4f46e5"> 
 
     <link rel="icon" type="image/x-icon" href="/favicon.ico"> 
-
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://unpkg.com/flexsearch@0.7.3/dist/flexsearch.compact.js"></script> 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> 
-    <script src="https://accounts.google.com/gsi/client" async defer></script> 
     
+    <script src="https://accounts.google.com/gsi/client" async defer></script> 
 
     <script>
         tailwind.config = {
@@ -134,6 +133,7 @@
             <button id="remix-quiz-btn" class="w-full py-2 bg-secondary text-white rounded-lg hover:bg-orange-600 transition">
                 Generate & Start Remix Quiz
             </button>
+            <button onclick="hideModal()" class="w-full mt-3 py-2 text-gray-500 hover:text-gray-800 transition">Cancel</button>
         </div>
 
         <div id="settings-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50">
@@ -141,14 +141,16 @@
             <label for="api-key-input" class="block text-sm font-medium mb-1">Gemini API Key (BYOK)</label>
             <input type="password" id="api-key-input" placeholder="Enter your key here" 
                    class="w-full p-2 border rounded-lg mb-2 dark:bg-gray-700">
-            <p id="settings-status" class="text-sm h-6 mb-3"></p>
+            <p id="settings-status" class="text-sm h-auto min-h-[1.5rem] mb-3 break-words"></p>
             <button id="save-settings-btn" class="w-full py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition">
                 Save & Verify Key
             </button>
+            <button onclick="hideModal()" class="w-full mt-3 py-2 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition border border-gray-200 rounded-lg">
+                Close / Go Back
+            </button>
         </div>
         
-        <div id="results-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50">
-            </div>
+        <div id="results-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50"></div>
 
         <div id="new-note-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-lg hidden border border-white/50 dark:border-gray-600/50" data-editing-id="">
             <h3 class="text-xl font-bold mb-4 text-secondary">Create/Edit Note</h3>
@@ -199,8 +201,7 @@
                 <h4 class="text-lg font-bold mb-3">AI Evaluation:</h4>
                 <p class="text-2xl font-extrabold text-green-600 dark:text-green-400 mb-3">Score: <span id="final-grader-score">--</span> / 10</p>
                 <h5 class="font-semibold mb-1">Detailed Feedback:</h5>
-                <div id="final-grader-feedback" class="text-sm">
-                    </div>
+                <div id="final-grader-feedback" class="text-sm"></div>
             </div>
             <button onclick="hideModal()" class="w-full mt-4 py-2 text-gray-500 hover:text-gray-700 transition">Close</button>
         </div>
