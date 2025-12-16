@@ -44,6 +44,8 @@ export async function initializeGenerativeModel() {
                 console.log(`[AI] Success! Locked onto model: ${activeModelName}`);
                 return true; 
             } catch (e) {
+                // --- ADD THIS LINE BELOW ---
+                alert(`Debug: Model ${modelName} failed. Reason: ${e.message}`); 
                 console.warn(`[AI] Model ${modelName} failed or not available. Trying next...`);
                 // Continue to next model in list
             }
