@@ -1,4 +1,5 @@
-// page-selection.js - Logic for Quiz Selection (Debug Version)
+// page-selection.js - Logic for Quiz Selection, Settings, and AI Remix
+// (Fixed: Waits for DOM to ensure buttons work)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, logError, APP_CONFIG } from './core.js';
@@ -6,113 +7,135 @@ import { initializeGenerativeModel, generateRemixQuiz, saveApiKey } from './ai.j
 import { getSetting, addQuestions } from './db.js'; 
 import { hideModal } from './ui-common.js'; 
 
-// --- DOM Elements ---
-const selectionContent = document.getElementById('quiz-selection-content');
-const settingsContent = document.getElementById('settings-content');
-const apiKeyInput = document.getElementById('api-key-input');
-const saveSettingsBtn = document.getElementById('save-settings-btn');
-const remixTopicInput = document.getElementById('remix-topic-input');
-const remixCountInput = document.getElementById('remix-count-input');
-const remixQuizBtn = document.getElementById('remix-quiz-btn');
-const settingsStatus = document.getElementById('settings-status');
+// Wait for the HTML to be fully ready
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("Page Selection Logic Loaded");
 
-// --- 1. Quiz Start Handler ---
-function handleQuizStart(subject, topic) {
-    if (!subject || !topic) {
-        alert("Please select both a subject and a topic.");
-        return;
-    }
-    hideModal(); 
-    startNewQuiz(subject, topic);
-}
+    // --- DOM Elements ---
+    const selectionContent = document.getElementById('quiz-selection-content');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const saveSettingsBtn = document.getElementById('save-settings-btn');
+    const remixTopicInput = document.getElementById('remix-topic-input');
+    const remixCountInput = document.getElementById('remix-count-input');
+    const remixQuizBtn = document.getElementById('remix-quiz-btn');
+    const settingsStatus = document.getElementById('settings-status');
 
-if (selectionContent) {
-    selectionContent.addEventListener('click', (e) => {
-        if (e.target.dataset.action === 'start-static-quiz') {
-            handleQuizStart(e.target.dataset.subject, e.target.dataset.topic);
+    // --- 1. Load Existing Key ---
+    // Pre-fill the input if a key is already saved
+    getSetting(APP_CONFIG.GEMINI_API_KEY_NAME).then(existingKey => {
+        if (apiKeyInput && existingKey) {
+            apiKeyInput.value = existingKey;
         }
     });
-}
 
-// --- 2. AI Remix Quiz ---
-if (remixQuizBtn) {
-    remixQuizBtn.addEventListener('click', async () => {
-        const topic = remixTopicInput.value.trim();
-        const count = parseInt(remixCountInput.value);
-
-        if (!topic) { alert("Enter a topic."); return; }
-
-        remixQuizBtn.disabled = true;
-        remixQuizBtn.textContent = "Connecting to AI...";
-        
-        try {
-            const existingQuestions = await fetchInitialQuestions();
-            const exampleSchema = existingQuestions.slice(0, 1); 
-
-            const newQuestions = await generateRemixQuiz({ subject: "Remixed", topic: topic }, exampleSchema, count);
-            
-            await addQuestions(newQuestions); 
-            
-            alert(`Generated ${newQuestions.length} questions on ${topic}!`);
-            handleQuizStart("Remixed", topic);
-
-        } catch (error) {
-            alert(`AI Error: ${error.message}`);
-        } finally {
-            remixQuizBtn.disabled = false;
-            remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
-        }
-    });
-}
-
-
-// --- 3. Settings Management (DEBUG MODE) ---
-if (saveSettingsBtn) {
-    saveSettingsBtn.addEventListener('click', async () => {
-        const apiKey = apiKeyInput.value.trim();
-        
-        if (!apiKey) {
-            settingsStatus.textContent = "Please enter a valid API key.";
-            return;
-        }
-
-        saveSettingsBtn.disabled = true;
-        settingsStatus.textContent = "Testing connection...";
-        settingsStatus.className = "text-sm mb-3 text-blue-600";
-
-        try {
-            // Save Key
-            const result = await saveApiKey(apiKey); 
-
-            // Result is now an OBJECT: { success: true/false, error: "..." }
-            if (result.success) {
-                settingsStatus.textContent = `Success! Connected to ${result.model}`;
-                settingsStatus.className = "text-sm mb-3 text-green-600 font-bold";
+    // --- 2. Quiz Selection (Static) ---
+    if (selectionContent) {
+        selectionContent.addEventListener('click', (e) => {
+            if (e.target.dataset.action === 'start-static-quiz') {
+                const subject = e.target.dataset.subject;
+                const topic = e.target.dataset.topic;
                 
-                setTimeout(() => {
+                if (subject && topic) {
                     hideModal();
-                    saveSettingsBtn.disabled = false;
-                    settingsStatus.textContent = ""; 
-                }, 1500);
-            } else {
-                // SHOW THE REAL ERROR
-                console.error(result.error);
-                settingsStatus.textContent = `Failed: ${result.error}`;
-                settingsStatus.className = "text-sm mb-3 text-red-600 font-bold break-words";
-                saveSettingsBtn.disabled = false;
+                    startNewQuiz(subject, topic);
+                }
             }
-        } catch (error) {
-             settingsStatus.textContent = `Critical Error: ${error.message}`;
-             settingsStatus.className = "text-sm mb-3 text-red-600 font-bold";
-             saveSettingsBtn.disabled = false;
-        }
-    });
-}
+        });
+    }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    const existingKey = await getSetting(APP_CONFIG.GEMINI_API_KEY_NAME);
-    if (apiKeyInput && existingKey) {
-        apiKeyInput.value = existingKey;
+    // --- 3. AI Remix Quiz (Generator) ---
+    if (remixQuizBtn) {
+        remixQuizBtn.addEventListener('click', async () => {
+            const topic = remixTopicInput.value.trim();
+            const count = parseInt(remixCountInput.value);
+
+            if (!topic) { 
+                alert("Please enter a topic."); 
+                return; 
+            }
+
+            // UI Feedback
+            remixQuizBtn.disabled = true;
+            remixQuizBtn.textContent = "Connecting to AI...";
+            
+            try {
+                // Get schema example
+                const existingQuestions = await fetchInitialQuestions();
+                const exampleSchema = existingQuestions.slice(0, 1); 
+
+                // Generate
+                const newQuestions = await generateRemixQuiz({ subject: "Remixed", topic: topic }, exampleSchema, count);
+                
+                // Save & Start
+                await addQuestions(newQuestions); 
+                
+                alert(`Success! Generated ${newQuestions.length} questions on ${topic}.`);
+                hideModal();
+                startNewQuiz("Remixed", topic);
+
+            } catch (error) {
+                console.error(error);
+                alert(`AI Error: ${error.message}`);
+            } finally {
+                remixQuizBtn.disabled = false;
+                remixQuizBtn.textContent = 'Generate & Start Remix Quiz';
+            }
+        });
+    }
+
+    // --- 4. Settings (Save Key) ---
+    if (saveSettingsBtn) {
+        console.log("Settings Button Found & Attached"); // Debug check
+
+        saveSettingsBtn.addEventListener('click', async () => {
+            console.log("Settings Button Clicked"); // Debug check
+            
+            const apiKey = apiKeyInput.value.trim();
+            
+            if (!apiKey) {
+                settingsStatus.textContent = "Please enter an API key.";
+                return;
+            }
+
+            // Immediate Visual Feedback
+            saveSettingsBtn.disabled = true;
+            saveSettingsBtn.textContent = "Verifying...";
+            settingsStatus.textContent = "Testing connection...";
+            settingsStatus.className = "text-sm mb-3 text-blue-600";
+
+            try {
+                // 1. Save Key
+                const result = await saveApiKey(apiKey); 
+
+                // 2. Handle Result
+                if (result.success) {
+                    settingsStatus.textContent = `Connected! Using model: ${result.model}`;
+                    settingsStatus.className = "text-sm mb-3 text-green-600 font-bold";
+                    
+                    // Auto-close after 1.5s
+                    setTimeout(() => {
+                        hideModal();
+                        saveSettingsBtn.disabled = false;
+                        saveSettingsBtn.textContent = "Save & Verify Key";
+                        settingsStatus.textContent = ""; 
+                    }, 1500);
+                } else {
+                    // Show Error
+                    console.error(result.error);
+                    settingsStatus.textContent = `Failed: ${result.error}`;
+                    settingsStatus.className = "text-sm mb-3 text-red-600 font-bold break-words";
+                    saveSettingsBtn.disabled = false;
+                    saveSettingsBtn.textContent = "Save & Verify Key";
+                }
+            } catch (error) {
+                 settingsStatus.textContent = `Critical Error: ${error.message}`;
+                 settingsStatus.className = "text-sm mb-3 text-red-600 font-bold";
+                 saveSettingsBtn.disabled = false;
+                 saveSettingsBtn.textContent = "Save & Verify Key";
+            }
+        });
+    } else {
+        console.error("Critical: Save Settings Button NOT found in HTML");
     }
 });
 
