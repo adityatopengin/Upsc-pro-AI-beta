@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>UPSC Pro - Local-First PWA</title>
+
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#4f46e5"> 
+
+    <link rel="icon" type="image/x-icon" href="/favicon.ico"> 
+
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <script src="https://unpkg.com/flexsearch@0.7.3/dist/flexsearch.compact.js"></script> 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> 
+    <script src="https://accounts.google.com/gsi/client" async defer></script> 
+    <script src="https://unpkg.com/@google/genai/dist/genai.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#f97316',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen">
+
+    <div id="initial-loading-overlay" class="fixed inset-0 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center z-50 transition-opacity duration-500">
+        <h1 class="text-4xl font-bold text-primary animate-pulse">UPSC Pro</h1>
+        <p class="text-lg mt-4 dark:text-gray-300">Preparing local environment...</p>
+    </div>
+
+    <div id="app-container" class="max-w-xl mx-auto p-4">
+        
+        <header class="p-4 bg-white/20 backdrop-blur-md rounded-2xl shadow-xl mb-6 border border-white/10 dark:border-gray-700/50">
+            <h1 class="text-2xl font-bold text-primary">UPSC Pro</h1>
+            
+            <div class="mt-2 flex space-x-2">
+                <button id="start-quiz-btn" onclick="showModal('quiz-selection-content')" 
+                        class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition">
+                    Start Quiz
+                </button>
+                <button onclick="showModal('mains-grader-content')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    ⚖️ Grade Mains
+                </button>
+                <button onclick="showModal('settings-content')"
+                        class="px-4 py-2 border border-gray-300 rounded-lg dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                    ⚙️ Settings
+                </button>
+            </div>
+        </header>
+
+        <main id="content-area">
+            
+            <div class="mb-6">
+                <input type="search" id="search-input" placeholder="Search questions or keywords locally" 
+                       class="w-full p-3 border rounded-lg dark:bg-gray-700 dark:border-gray-600 focus:ring-secondary focus:border-secondary">
+            </div>
+
+            <div id="quiz-container" class="hidden">
+                <div id="question-display" class="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md"></div>
+                <div id="options-container" class="mb-6"></div>
+                <button id="next-button" disabled 
+                        class="w-full py-3 bg-secondary text-white rounded-lg font-bold disabled:opacity-50 hover:bg-orange-700 transition">
+                    Next Question
+                </button>
+            </div>
+            
+            <div id="home-screen" class="p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-gray-700/50">
+                
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">My Study Notes</h2>
+                    <button onclick="showModal('new-note-content')" 
+                            class="py-1 px-3 bg-secondary text-white rounded-lg text-sm hover:bg-orange-600 transition">
+                        + New Note
+                    </button>
+                </div>
+                
+                <div id="notes-list-container" class="mt-4">
+                    <p class="text-gray-500">Loading notes...</p>
+                </div>
+
+                <hr class="my-6 border-gray-200 dark:border-gray-700">
+                
+                <h3 class="text-lg font-semibold mb-2">Search Results</h3>
+                <div id="search-results-list">
+                    <p class="mt-2 text-sm dark:text-gray-300">Type in the search bar to find content.</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registered successfully with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+    
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden opacity-0 transition-opacity z-40"></div>
+    
+    <div id="unified-modal-container" class="fixed inset-0 flex items-center justify-center p-4 hidden opacity-0 transition-opacity z-50">
+        
+        <div id="quiz-selection-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50">
+            <h3 class="text-xl font-bold mb-4 text-primary">Select Quiz</h3>
+            <button data-action="start-static-quiz" data-subject="History" data-topic="IVC" 
+                    class="w-full py-2 mb-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition">
+                Start: History - IVC (5 Qs)
+            </button>
+            <hr class="my-4">
+            <h4 class="font-semibold mb-2">AI Remix Quiz Generator</h4>
+            <input type="text" id="remix-topic-input" placeholder="Topic (e.g., Green Revolution)" class="w-full p-2 border rounded-lg mb-2 dark:bg-gray-700">
+            <input type="number" id="remix-count-input" value="5" min="1" max="20" class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700">
+            <button id="remix-quiz-btn" class="w-full py-2 bg-secondary text-white rounded-lg hover:bg-orange-600 transition">
+                Generate & Start Remix Quiz
+            </button>
+        </div>
+
+        <div id="settings-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50">
+            <h3 class="text-xl font-bold mb-4 text-primary">Settings</h3>
+            <label for="api-key-input" class="block text-sm font-medium mb-1">Gemini API Key (BYOK)</label>
+            <input type="password" id="api-key-input" placeholder="Enter your key here" 
+                   class="w-full p-2 border rounded-lg mb-2 dark:bg-gray-700">
+            <p id="settings-status" class="text-sm h-6 mb-3"></p>
+            <button id="save-settings-btn" class="w-full py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition">
+                Save & Verify Key
+            </button>
+        </div>
+        
+        <div id="results-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-sm hidden border border-white/50 dark:border-gray-600/50">
+            </div>
+
+        <div id="new-note-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-lg hidden border border-white/50 dark:border-gray-600/50" data-editing-id="">
+            <h3 class="text-xl font-bold mb-4 text-secondary">Create/Edit Note</h3>
+            
+            <label for="diagram-file-input" class="block text-sm font-medium mb-1">Generate Notes from Diagram (AI Vision)</label>
+            <input type="file" id="diagram-file-input" accept="image/*" class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700">
+            <p class="text-xs text-gray-500 mb-4">Uploading an image will call Gemini Vision to auto-generate notes.</p>
+
+            <label for="note-title-input" class="block text-sm font-medium mb-1">Note Title</label>
+            <input type="text" id="note-title-input" placeholder="e.g., IVC Important Sites" 
+                   class="w-full p-2 border rounded-lg mb-3 dark:bg-gray-700">
+
+            <label for="note-text-input" class="block text-sm font-medium mb-1">Note Content</label>
+            <textarea id="note-text-input" rows="8" placeholder="Start typing your revision points or wait for AI generation..." 
+                      class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700"></textarea>
+
+            <button id="save-note-button" class="w-full py-2 bg-primary text-white rounded-lg hover:bg-indigo-700 transition">
+                Save Note Locally
+            </button>
+            <button onclick="hideModal()" class="w-full mt-2 py-2 text-gray-500 hover:text-gray-700 transition">Cancel</button>
+        </div>
+
+        <div id="mains-grader-content" class="bg-white/90 backdrop-blur-sm rounded-xl shadow-2xl p-6 w-full max-w-2xl hidden border border-white/50 dark:border-gray-600/50">
+            <h3 class="text-xl font-bold mb-4 text-primary">⚖️ Mains Answer Grader</h3>
+            
+            <form id="mains-grader-form">
+                <label for="grader-question" class="block text-sm font-medium mb-1 mt-2">UPSC Mains Question</label>
+                <textarea id="grader-question" rows="2" placeholder="e.g., Discuss the impact of Green Revolution..." 
+                          class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700"></textarea>
+
+                <label for="grader-model-key" class="block text-sm font-medium mb-1">Model Answer Key / Rubric</label>
+                <textarea id="grader-model-key" rows="4" placeholder="Provide the core points and structure expected..." 
+                          class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700"></textarea>
+                
+                <label for="grader-user-answer" class="block text-sm font-medium mb-1">Your Written Answer</label>
+                <textarea id="grader-user-answer" rows="10" placeholder="Type or paste your complete 250-word answer here..." 
+                          class="w-full p-2 border rounded-lg mb-4 dark:bg-gray-700"></textarea>
+
+                <p id="grader-status" class="text-secondary text-sm mb-3 h-6"></p>
+
+                <button type="submit" id="grade-answer-btn" 
+                        class="w-full py-3 bg-secondary text-white rounded-lg font-bold hover:bg-orange-700 transition">
+                    Get AI Score & Feedback (UPSC Standard)
+                </button>
+            </form>
+
+            <div id="grader-results-display" class="w-full mt-4 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg hidden">
+                <h4 class="text-lg font-bold mb-3">AI Evaluation:</h4>
+                <p class="text-2xl font-extrabold text-green-600 dark:text-green-400 mb-3">Score: <span id="final-grader-score">--</span> / 10</p>
+                <h5 class="font-semibold mb-1">Detailed Feedback:</h5>
+                <div id="final-grader-feedback" class="text-sm">
+                    </div>
+            </div>
+            <button onclick="hideModal()" class="w-full mt-4 py-2 text-gray-500 hover:text-gray-700 transition">Close</button>
+        </div>
+
+    </div>
+    
+    <script type="module" src="./db.js"></script>
+    <script type="module" src="./core.js"></script>
+    <script type="module" src="./ui-common.js"></script>
+    <script type="module" src="./page-quiz.js"></script>
+    <script type="module" src="./page-selection.js"></script>
+    <script type="module" src="./page-notes.js"></script>
+    
+    <script type="module">
+        import { showModal, hideModal } from './ui-common.js';
+        import { startNewQuiz } from './page-quiz.js';
+        import { fullTextSearchQuestions } from './db.js';
+        import { gradeMainsAnswer } from './ai.js'; 
+        
+        window.showModal = showModal;
+        window.hideModal = hideModal;
+        window.startNewQuiz = startNewQuiz;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            const resultsList = document.getElementById('search-results-list');
+            const graderForm = document.getElementById('mains-grader-form');
+            const graderStatus = document.getElementById('grader-status');
+            const graderResultsDisplay = document.getElementById('grader-results-display');
+            const finalScoreEl = document.getElementById('final-grader-score');
+            const finalFeedbackEl = document.getElementById('final-grader-feedback');
+            const gradeAnswerBtn = document.getElementById('grade-answer-btn');
+
+            // --- Search Integration Logic (Debounced) ---
+            let searchTimeout;
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(async () => {
+                        const query = searchInput.value.trim();
+                        if (query.length > 2) {
+                            resultsList.innerHTML = '<p class="text-secondary">Searching...</p>';
+                            try {
+                                const results = await fullTextSearchQuestions(query);
+                                renderSearchResults(results, resultsList);
+                            } catch (error) {
+                                resultsList.innerHTML = `<p class="text-red-500">Search Error. Check console.</p>`;
+                            }
+                        } else if (query.length === 0) {
+                            resultsList.innerHTML = '<p class="mt-2 text-sm dark:text-gray-300">Type in the search bar to find content.</p>';
+                        }
+                    }, 300); 
+                });
+            }
+
+            function renderSearchResults(results, container) {
+                if (results.length === 0) {
+                    container.innerHTML = `<p class="text-gray-500">No results found for your query.</p>`;
+                    return;
+                }
+                
+                const html = results.map(q => `
+                    <div class="p-3 mb-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <p class="font-semibold text-primary">${q.subject} - ${q.topic}</p>
+                        <p class="text-sm">${q.question_text || q.statements[0]?.text}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Keywords: ${q.keywords.join(', ')}</p>
+                    </div>
+                `).join('');
+                
+                container.innerHTML = `
+                    <p class="text-sm mb-2">Found ${results.length} item(s):</p>
+                    ${html}
+                `;
+            }
+
+
+            // --- Mains Grader Submission Logic ---
+            if (graderForm) {
+                graderForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const question = document.getElementById('grader-question').value.trim();
+                    const modelKey = document.getElementById('grader-model-key').value.trim();
+                    const userAnswer = document.getElementById('grader-user-answer').value.trim();
+                    const maxMarks = 10; 
+
+                    if (!question || !modelKey || !userAnswer) {
+                        graderStatus.textContent = 'Please fill out all fields.';
+                        return;
+                    }
+
+                    graderStatus.textContent = 'Grading answer... (This may take time)';
+                    gradeAnswerBtn.disabled = true;
+                    graderResultsDisplay.classList.add('hidden'); 
+
+                    try {
+                        const result = await gradeMainsAnswer(question, userAnswer, modelKey, maxMarks);
+                        
+                        finalScoreEl.textContent = `${result.score || 0}`;
+                        
+                        const renderedFeedback = marked.parse(result.feedback || 'No detailed feedback received.');
+                        finalFeedbackEl.innerHTML = renderedFeedback; 
+                        
+                        graderResultsDisplay.classList.remove('hidden');
+                        graderStatus.textContent = `Grading complete! Score: ${result.score}/${maxMarks}`;
+
+                    } catch (error) {
+                        graderStatus.textContent = `Error: ${error.message}. Check API key.`;
+                    } finally {
+                        gradeAnswerBtn.disabled = false;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
+
