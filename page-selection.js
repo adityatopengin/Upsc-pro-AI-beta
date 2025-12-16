@@ -1,4 +1,4 @@
-// page-selection.js - Full Functionality (Settings, Remix, Static, & Current Affairs)
+// page-selection.js - Full Functionality (Settings, Remix, Static, Current Affairs & News Scanner)
 
 import { startNewQuiz } from './page-quiz.js';
 import { fetchInitialQuestions, APP_CONFIG } from './core.js';
@@ -109,40 +109,33 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // --- D. DAILY CURRENT AFFAIRS GENERATOR (NEW) ---
+    // --- D. DAILY CURRENT AFFAIRS GENERATOR ---
     const caBtn = e.target.closest('#generate-ca-btn');
     if (caBtn) {
         if (caBtn.disabled) return;
 
-        // 1. UI Feedback
+        // UI Feedback
         caBtn.disabled = true;
         const originalText = caBtn.innerHTML;
         caBtn.innerHTML = `<span class="animate-spin">⚙️</span> Analyzing News...`;
 
         try {
-            // 2. Load Dependencies
             const aiModule = await import('./ai.js');
-            
-            // 3. Get Schema
             const existingQuestions = await fetchInitialQuestions();
             const schema = existingQuestions[0]; 
 
-            // 4. Call AI
             caBtn.innerHTML = `<span class="animate-spin">🧠</span> Drafting Questions...`;
             const newQuestions = await aiModule.generateCurrentAffairsQuiz(schema);
 
-            // 5. Tag them for the system
-            const dateTopic = new Date().toLocaleDateString('en-GB'); // "17/12/2025"
+            const dateTopic = new Date().toLocaleDateString('en-GB'); 
             const taggedQuestions = newQuestions.map(q => ({
                 ...q,
                 subject: "Current Affairs", 
                 topic: dateTopic 
             }));
 
-            // 6. Save to DB
             await addQuestions(taggedQuestions);
 
-            // 7. Success Popup & Auto-Start
             const userWantsToPlay = confirm(
                 `Success! Generated 5 CA Questions for ${dateTopic}.\n\nDo you want to attempt them right now?`
             );
@@ -160,5 +153,65 @@ document.addEventListener('click', async (e) => {
         }
         return;
     }
+
+    // --- E. NEWS SCANNER (NEW) ---
+    const newsBtn = e.target.closest('#analyze-news-btn');
+    if (newsBtn) {
+        const input = document.getElementById('news-input');
+        const text = input.value.trim();
+
+        if (!text) { alert("Please paste some text or a topic name first."); return; }
+
+        if (newsBtn.disabled) return;
+
+        // 1. UI Loading State
+        newsBtn.disabled = true;
+        const originalText = newsBtn.innerHTML;
+        newsBtn.innerHTML = `<span class="animate-spin">⏳</span> Reading...`;
+
+        try {
+            const aiModule = await import('./ai.js');
+            
+            // 2. Call AI
+            newsBtn.innerHTML = `<span class="animate-spin">🤔</span> Analyzing...`;
+            const analysisMarkdown = await aiModule.generateNewsAnalysis(text);
+
+            // 3. Render Result
+            const resultCard = document.getElementById('news-result-card');
+            const contentDiv = document.getElementById('news-analysis-content');
+            
+            // Render HTML using marked (Global variable)
+            contentDiv.innerHTML = marked.parse(analysisMarkdown);
+            
+            // 4. Show & Slide
+            resultCard.classList.remove('hidden');
+            resultCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        } catch (error) {
+            console.error(error);
+            alert(`Analysis Failed: ${error.message}`);
+        } finally {
+            newsBtn.disabled = false;
+            newsBtn.innerHTML = originalText;
+        }
+        return;
+    }
 });
+
+// --- 3. HELPER FUNCTIONS (Exposed for HTML onclick events) ---
+
+window.closeNewsResult = function() {
+    const card = document.getElementById('news-result-card');
+    if (card) card.classList.add('hidden');
+}
+
+window.copyNewsResult = function() {
+    const content = document.getElementById('news-analysis-content');
+    if (content) {
+        const text = content.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Analysis copied to clipboard!");
+        }).catch(err => console.error("Copy failed", err));
+    }
+}
 
