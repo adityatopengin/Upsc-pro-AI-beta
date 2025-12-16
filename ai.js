@@ -1,63 +1,53 @@
-// ai.js - Client-Side AI Integration with Adaptive Model Selection
+// ai.js - Client-Side AI Integration (Robust Debug Version)
 
-import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+// FIX: Use jsdelivr, it is often more reliable on mobile networks than esm.run
+import { GoogleGenerativeAI } from "https://cdn.jsdelivr.net/npm/@google/generative-ai/+esm";
 import { getSetting, setSetting } from './db.js'; 
 import { logError, APP_CONFIG } from './core.js'; 
 
-// --- Configuration: The Fallback Chain ---
-// The app will try these in order. It picks the first one that works.
 const MODEL_PRIORITY_LIST = [
-    'gemini-1.5-pro',   // Best quality (Good for Grading)
-    'gemini-1.5-flash', // Best speed/efficiency (Good for Quizzes)
-    'gemini-1.0-pro',   // Legacy fallback
-    'gemini-pro'        // Oldest fallback
+    'gemini-1.5-flash', // Fastest & most likely to work on Free Tier
+    'gemini-1.5-pro',
+    'gemini-1.0-pro'
 ];
 
 const GEMINI_API_KEY_DB_KEY = APP_CONFIG.GEMINI_API_KEY_NAME;
 
 let genAI = null;
-let activeModelName = null; // Stores the name of the "winning" model
+let activeModelName = null;
 
-// --- 1. Initialization & Adaptive Selection ---
+// --- Initialization ---
 export async function initializeGenerativeModel() {
     const apiKey = await getSetting(GEMINI_API_KEY_DB_KEY);
     
     if (!apiKey) {
-        console.log("[AI] No API Key found.");
-        return false;
+        return { success: false, error: "No API Key found in settings." };
     }
 
     try {
         genAI = new GoogleGenerativeAI(apiKey);
         
-        console.log("[AI] Negotiating best available model...");
-        
-        // Loop through the list to find the best working model
+        // Loop to find a working model
+        let lastError = null;
         for (const modelName of MODEL_PRIORITY_LIST) {
             try {
                 const model = genAI.getGenerativeModel({ model: modelName });
-                // Send a tiny "Ping" to verify access
                 await model.generateContent("Test"); 
-                
-                // If we get here, it worked!
                 activeModelName = modelName;
-                console.log(`[AI] Success! Locked onto model: ${activeModelName}`);
-                return true; 
+                console.log(`[AI] Locked onto: ${activeModelName}`);
+                return { success: true, model: activeModelName }; 
             } catch (e) {
-                // --- ADD THIS LINE BELOW ---
-                alert(`Debug: Model ${modelName} failed. Reason: ${e.message}`); 
-                console.warn(`[AI] Model ${modelName} failed or not available. Trying next...`);
-                // Continue to next model in list
+                console.warn(`[AI] ${modelName} failed: ${e.message}`);
+                lastError = e.message;
             }
         }
+        
+        // If loop finishes, nothing worked
+        return { success: false, error: `All models failed. Last error: ${lastError}` };
 
-        // If loop finishes without returning, nothing worked
-        throw new Error("All known Gemini models failed. Check API Key quotas.");
-
-    } catch (error) {
-        logError('AI_INIT_CRITICAL', error);
-        activeModelName = null;
-        return false;
+    } catch (criticalError) {
+        // This catches import errors or invalid key formats
+        return { success: false, error: `Critical Init Error: ${criticalError.message}` };
     }
 }
 
@@ -66,9 +56,8 @@ export async function saveApiKey(key) {
     return await initializeGenerativeModel();
 }
 
-/**
- * Helper: Extract JSON robustly
- */
+// --- Rest of the functions (Helpers) ---
+
 function extractJson(text) {
     try {
         return JSON.parse(text);
@@ -79,117 +68,68 @@ function extractJson(text) {
     }
 }
 
-
-/**
- * 2. Socratic Explainer
- */
 export async function generateSocraticExplanation(question, userSelections, correctSelections) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) return "Error: AI not initialized.";
 
-    const systemInstruction = "You are a UPSC expert. Explain why the user's choice is wrong and the correct choice is right. Be concise.";
-    const userPrompt = `
-        User selected: [${userSelections.join(', ')}]. Correct: [${correctSelections.join(', ')}].
-        Question: ${question.statements ? question.statements.map(s => `${s.id}: ${s.text}`).join('\n') : question.question_text}
-    `;
+    const systemInstruction = "Explain why the user's choice is wrong. Be concise.";
+    const userPrompt = `User: [${userSelections}]. Correct: [${correctSelections}]. Q: ${question.question_text}`;
     
     try {
-        // USE THE ACTIVE MODEL
         const model = genAI.getGenerativeModel({ model: activeModelName, systemInstruction });
         const result = await model.generateContent(userPrompt);
         return result.response.text();
     } catch (error) {
-        logError('AI_EXPLAINER_FAIL', error);
-        return "Explanation failed. Check network.";
+        return `Error: ${error.message}`;
     }
 }
 
-
-/**
- * 3. Remix Quiz Generator
- */
 export async function generateRemixQuiz(context, existingQuestions, count = 5) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not initialized.");
 
-    const systemInstruction = `Generate exactly ${count} NEW unique questions in STRICT JSON format. No markdown, no talking.`;
-    const userPrompt = `
-        Subject: ${context.subject}, Topic: ${context.topic}.
-        Schema Example: ${JSON.stringify(existingQuestions[0])}
-        OUTPUT: JSON Array of ${count} objects.
-    `;
+    const systemInstruction = `Generate ${count} questions in strict JSON.`;
+    const userPrompt = `Subject: ${context.subject}. Schema: ${JSON.stringify(existingQuestions[0])}`;
     
     try {
         const model = genAI.getGenerativeModel({ model: activeModelName, systemInstruction });
         const result = await model.generateContent(userPrompt);
         return extractJson(result.response.text());
     } catch (error) {
-        logError('AI_REMIX_FAIL', error);
-        throw new Error(`Generation failed: ${error.message}`);
+        throw new Error(error.message);
     }
 }
 
-
-/**
- * 4. Vision Notes
- */
 export async function generateNotesFromDiagram(base64Image, mimeType, promptText) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not initialized.");
 
-    // Note: Vision requires 1.5-flash or 1.5-pro. 
-    // If activeModel falls back to 'gemini-pro' (1.0), vision might fail.
-    // We enforce Flash for vision if the active model is too old.
-    const visionModelName = activeModelName.includes('1.5') ? activeModelName : 'gemini-1.5-flash';
-
     try {
-        const model = genAI.getGenerativeModel({ model: visionModelName });
-        const result = await model.generateContent([
-            promptText, 
-            { inlineData: { data: base64Image, mimeType: mimeType } }
-        ]);
+        // Vision requires 1.5 models
+        const visionModel = activeModelName.includes('1.5') ? activeModelName : 'gemini-1.5-flash';
+        const model = genAI.getGenerativeModel({ model: visionModel });
+        const result = await model.generateContent([promptText, { inlineData: { data: base64Image, mimeType } }]);
         return result.response.text();
     } catch (error) {
-        logError('AI_VISION_FAIL', error);
-        throw new Error("Image processing failed.");
+        throw new Error(error.message);
     }
 }
 
-
-/**
- * 5. Mains Answer Grader
- */
 export async function gradeMainsAnswer(question, userAnswer, modelAnswerKey, maxMarks = 10) {
     if (!activeModelName) await initializeGenerativeModel();
     if (!activeModelName) throw new Error("AI not initialized.");
     
-    const systemInstruction = `
-        You are a strict UPSC examiner. Grade the answer out of ${maxMarks}.
-        Output STRICT JSON only: {"score": number, "feedback": "markdown string"}
-    `;
-    const userPrompt = `
-        Question: ${question}
-        Model Key: ${modelAnswerKey}
-        Student Answer: ${userAnswer}
-    `;
+    const systemInstruction = "Grade this answer. Return JSON: {score: number, feedback: string}.";
+    const userPrompt = `Q: ${question} Answer: ${userAnswer}`;
     
     try {
-        const model = genAI.getGenerativeModel({ 
-            model: activeModelName, // Uses the best available model automatically
-            systemInstruction: systemInstruction 
-        });
-
-        console.log(`[AI] Grading using ${activeModelName}...`);
+        const model = genAI.getGenerativeModel({ model: activeModelName, systemInstruction });
         const result = await model.generateContent(userPrompt);
         return extractJson(result.response.text());
-
     } catch (error) {
-        console.error("[AI Grader Error]", error);
-        logError('AI_GRADER_FAIL', error);
-        throw new Error(`Grading failed. Details: ${error.message}`);
+        throw new Error(error.message);
     }
 }
 
-// Auto-initialize on load
 document.addEventListener('DOMContentLoaded', initializeGenerativeModel);
 
